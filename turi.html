@@ -3,14 +3,14 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>TURI – 前進主体の魚ランダム移動</title>
+<title>TURI – 前進主体/境界内ランダム魚</title>
 <style>
   :root{
     --stage-w: min(1280px, 94vw);
     --ratio: 16/9;
-    --fish-max: 6; /* 同時出現上限 */
+    --fish-max: 6;
   }
-  *{ box-sizing: border-box; }
+  *{ box-sizing:border-box }
   html,body{ margin:0; height:100%; background:#05121a; }
   .wrap{ min-height:100%; display:grid; place-items:center; padding:16px; }
 
@@ -19,23 +19,23 @@
     width: var(--stage-w);
     aspect-ratio: var(--ratio);
     overflow:hidden;
-    border-radius: 18px;
+    border-radius:18px;
     background:#000;
-    box-shadow: 0 18px 48px rgba(0,0,0,.45);
+    box-shadow:0 18px 48px rgba(0,0,0,.45);
   }
-  /* 背景レイヤー */
+
   .layer{ position:absolute; inset:0; width:100%; height:100%; object-fit:cover; pointer-events:none; }
   #sand{ z-index:1; }
   #waterBase{ z-index:2; opacity:.8; }
   .tint{ z-index:3; mix-blend-mode:multiply; background:rgba(25,181,193,.22); }
   .caustics{ z-index:4; opacity:.25; mix-blend-mode:screen; background:#000; filter:url(#causticsFilter); }
 
-  /* 魚レイヤー（最前面） */
+  /* 魚は最前面に */
   #fishLayer{ position:absolute; inset:0; z-index:10; pointer-events:none; }
   .fish{
     position:absolute;
     transform-origin:center center;
-    opacity:0.95;
+    opacity:.96;
     will-change: transform, top, left;
     image-rendering:auto;
   }
@@ -44,13 +44,10 @@
 <body>
   <main class="wrap">
     <section class="stage" id="stage">
-      <!-- 背景 -->
       <img id="sand" class="layer" src="assets/sand.png" alt="砂">
       <img id="waterBase" class="layer" src="assets/water_background_80percent.png" alt="水">
       <div class="layer tint"></div>
       <div class="layer caustics"></div>
-
-      <!-- 魚 -->
       <div id="fishLayer"></div>
     </section>
   </main>
@@ -74,33 +71,41 @@
   </svg>
 
 <script>
-/* ========= 可調整パラメータ ========= */
+/* ====== 調整パラメータ ====== */
 const CONFIG = {
-  FISH_MIN_SIZE: 56,     // 魚の最小幅(px)
-  FISH_MAX_SIZE: 120,    // 魚の最大幅(px)
-  FISH_MAX_COUNT: 6,     // 上限（:root --fish-max と合わせるならここも変更）
-  BASE_SPEED: 90,        // 基本速度(px/秒) …サイズで自動調整
-  WOBBLE_SPEED: 0.8,     // 進行中の微小な蛇行の速さ(Hz)
-  WOBBLE_STRENGTH: 10,   // 進行中の微小な蛇行の強さ(px)
-  TURN_RATE: 120,        // 1秒あたりの最大旋回角（度/秒）←大きいほどキビキビ
-  EDGE_MARGIN: 40,       // 端からの安全マージン(px)
-  RETARGET_INTERVAL: [3.5, 7.0], // 目標方向の更新間隔（秒）min,max
+  FISH_MIN_SIZE: 110,     // px（最小）
+  FISH_MAX_SIZE: 220,     // px（最大）
+  FISH_MAX_COUNT: 6,      // 同時数
+  BASE_SPEED: 110,        // px/s（基準、サイズで補正）
+  TURN_RATE: 160,         // 度/秒（最大旋回角）
+  EDGE_MARGIN: 56,        // 端からの安全域
+  RETARGET_SEC: [3.0, 6.5], // 目標更新間隔（秒）
+  GOAL_RADIUS: 18,        // 到達とみなす半径
+  NUDGE_INWARD: 14,       // 境界での押し戻し距離(px)
+  WOBBLE_SPEED: 0.6,      // 見た目ローリング（Hz）
+  WOBBLE_DEG: 5           // 見た目ローリング角度（度）
 };
 
 const stage = document.getElementById('stage');
 const fishLayer = document.getElementById('fishLayer');
 const fishImgSrc = 'assets/fish.png';
 
-const FISHES = []; // {el,x,y,angle,speed,scale,nextRetarget,seed}
+const FISHES = []; // {el,x,y,angle,speed,target:{x,y},nextRetarget,seed,width}
 
-/* 角度・ベクトルユーティリティ */
-const DEG2RAD = Math.PI/180;
-const RAD2DEG = 180/Math.PI;
-function clamp(v,min,max){ return Math.max(min, Math.min(max, v)); }
-function lerp(a,b,t){ return a + (b-a)*t; }
-function rand(min,max){ return Math.random()*(max-min)+min; }
+/* ユーティリティ */
+const DEG2RAD = Math.PI/180, RAD2DEG = 180/Math.PI;
+const clamp = (v,min,max)=> Math.max(min, Math.min(max,v));
+const lerp  = (a,b,t)=> a+(b-a)*t;
+const rand  = (a,b)=> Math.random()*(b-a)+a;
 
-/* スポーン（画面内のみ） */
+function insideBox(w,h){ // 画面内の安全目標を返す
+  return {
+    x: rand(CONFIG.EDGE_MARGIN, w - CONFIG.EDGE_MARGIN),
+    y: rand(CONFIG.EDGE_MARGIN, h - CONFIG.EDGE_MARGIN)
+  };
+}
+
+/* 魚の生成（画面内から開始） */
 function spawnFish(){
   if(FISHES.length >= CONFIG.FISH_MAX_COUNT) return;
 
@@ -109,121 +114,135 @@ function spawnFish(){
   el.className = 'fish';
 
   const w = stage.clientWidth, h = stage.clientHeight;
-  const x = rand(CONFIG.EDGE_MARGIN, w - CONFIG.EDGE_MARGIN);
-  const y = rand(CONFIG.EDGE_MARGIN, h - CONFIG.EDGE_MARGIN);
 
-  // ランダムサイズ（大きい個体は遅め）
+  const pos = insideBox(w,h);
   const width = rand(CONFIG.FISH_MIN_SIZE, CONFIG.FISH_MAX_SIZE);
-  el.style.width = `${width}px`;
-  const sizeRatio = (width - CONFIG.FISH_MIN_SIZE) / (CONFIG.FISH_MAX_SIZE - CONFIG.FISH_MIN_SIZE + 1e-6);
-  const speed = CONFIG.BASE_SPEED * lerp(1.15, 0.75, sizeRatio); // 小さいほど速い
+  el.style.width = width + 'px';
 
-  // 初期進行方向（中心にやや向ける）
-  const cx = w/2, cy = h/2;
-  let angle = Math.atan2(cy - y, cx - x) * RAD2DEG + rand(-45,45);
+  // サイズで速度スケール（大きいほどやや遅い）
+  const t = (width - CONFIG.FISH_MIN_SIZE) / Math.max(1, CONFIG.FISH_MAX_SIZE - CONFIG.FISH_MIN_SIZE);
+  const speed = CONFIG.BASE_SPEED * lerp(1.1, 0.75, t);
 
-  // DOM配置
-  el.style.left = `${x}px`;
-  el.style.top  = `${y}px`;
-  el.style.transform = `rotate(${angle + 90}deg)`; // 画像は上が頭 → +90°
+  // 初期向きは中心付近へ + ランダム
+  const cx=w/2, cy=h/2;
+  let angle = Math.atan2(cy - pos.y, cx - pos.x) * RAD2DEG + rand(-40,40);
 
+  el.style.left = pos.x + 'px';
+  el.style.top  = pos.y + 'px';
+  el.style.transform = `rotate(${angle + 90}deg)`;
   fishLayer.appendChild(el);
 
+  const target = insideBox(w,h);
+  const now = performance.now();
+
   FISHES.push({
-    el, x, y, angle, speed,
-    seed: Math.random()*1000,     // 個体ごとの蛇行位相
-    nextRetarget: performance.now() + rand(CONFIG.RETARGET_INTERVAL[0], CONFIG.RETARGET_INTERVAL[1]) * 1000,
-    targetAngle: angle + rand(-30,30), // 最初の目標向き
+    el,
+    x: pos.x, y: pos.y,
+    angle, speed, width,
+    target,
+    nextRetarget: now + rand(CONFIG.RETARGET_SEC[0], CONFIG.RETARGET_SEC[1]) * 1000,
+    seed: Math.random()*1000
   });
 }
 
-/* 方向を場内に保つよう誘導（壁反射ではなく“曲げる”） */
-function steerInside(fish, w, h){
-  const { EDGE_MARGIN } = CONFIG;
-  let desired = fish.targetAngle;
-
-  if (fish.x < EDGE_MARGIN) desired = 0;                 // 右へ
-  if (fish.x > w - EDGE_MARGIN) desired = 180;           // 左へ
-  if (fish.y < EDGE_MARGIN) desired = 90;                // 下へ
-  if (fish.y > h - EDGE_MARGIN) desired = -90;           // 上へ
-
-  // 端に近いほど強めに内向きへ
-  const kx = (fish.x < EDGE_MARGIN) ? (EDGE_MARGIN - fish.x)/EDGE_MARGIN
-           : (fish.x > w-EDGE_MARGIN) ? (fish.x - (w-EDGE_MARGIN))/EDGE_MARGIN : 0;
-  const ky = (fish.y < EDGE_MARGIN) ? (EDGE_MARGIN - fish.y)/EDGE_MARGIN
-           : (fish.y > h-EDGE_MARGIN) ? (fish.y - (h-EDGE_MARGIN))/EDGE_MARGIN : 0;
-  const bias = clamp(Math.max(kx,ky), 0, 1);
-
-  fish.targetAngle = lerp(fish.targetAngle, desired, bias*0.5);
+/* 角度追従（最大旋回角を守る） */
+function stepAngle(cur, target, maxStep){
+  let diff = ((target - cur + 540) % 360) - 180;
+  diff = clamp(diff, -maxStep, maxStep);
+  return cur + diff;
 }
 
-/* 目標向きをたまに更新（サイドステップ禁止→小さめの進路変更だけ） */
-function maybeRetarget(fish, now){
-  if(now >= fish.nextRetarget){
-    fish.targetAngle += rand(-25, 25); // ゆるいカーブ
-    fish.nextRetarget = now + rand(CONFIG.RETARGET_INTERVAL[0], CONFIG.RETARGET_INTERVAL[1]) * 1000;
-  }
-}
-
-/* 角度差を最大旋回角で制限して滑らかに追従 */
-function stepAngle(angle, target, maxStepDeg){
-  // 差を[-180,180]に正規化
-  let diff = ((target - angle + 540) % 360) - 180;
-  diff = clamp(diff, -maxStepDeg, maxStepDeg);
-  return angle + diff;
+/* 目標を内側に再設定（境界で即呼ぶ） */
+function forceInwardGoal(f){
+  const w = stage.clientWidth, h = stage.clientHeight;
+  // 現在地から中心方向へ近めの目標
+  const cx=w/2, cy=h/2;
+  const dir = Math.atan2(cy - f.y, cx - f.x);
+  const dist = 120 + Math.random()*180;
+  const nx = clamp(f.x + Math.cos(dir)*dist, CONFIG.EDGE_MARGIN, w-CONFIG.EDGE_MARGIN);
+  const ny = clamp(f.y + Math.sin(dir)*dist, CONFIG.EDGE_MARGIN, h-CONFIG.EDGE_MARGIN);
+  f.target = {x:nx, y:ny};
+  f.nextRetarget = performance.now() + rand(CONFIG.RETARGET_SEC[0], CONFIG.RETARGET_SEC[1]) * 1000;
 }
 
 /* メインループ */
 let last = performance.now();
 function tick(now){
-  const dt = (now - last) / 1000;
-  last = now;
-
+  const dt = (now - last) / 1000; last = now;
   const w = stage.clientWidth, h = stage.clientHeight;
 
-  for(const fish of FISHES){
-    // 壁寄りなら内側へバイアス
-    steerInside(fish, w, h);
-    // たまに進路を微調整
-    maybeRetarget(fish, now);
+  for(const f of FISHES){
+    // 目標更新（一定間隔）
+    if(now >= f.nextRetarget){
+      f.target = insideBox(w,h);
+      f.nextRetarget = now + rand(CONFIG.RETARGET_SEC[0], CONFIG.RETARGET_SEC[1]) * 1000;
+    }
 
-    // 最大旋回角を適用（度/秒 → フレーム分）
+    // 目標角
+    const desired = Math.atan2(f.target.y - f.y, f.target.x - f.x) * RAD2DEG;
+
+    // 最大旋回角（dt分）
     const maxTurn = CONFIG.TURN_RATE * dt;
-    fish.angle = stepAngle(fish.angle, fish.targetAngle, maxTurn);
+    f.angle = stepAngle(f.angle, desired, maxTurn);
 
-    // 進行（前進のみ）
-    const rad = fish.angle * DEG2RAD;
-    // 微小な蛇行（前進方向に対する±のヨー変動）→ サイドステップではなく前進に合成
-    const wob = Math.sin((now/1000 + fish.seed) * 2*Math.PI*CONFIG.WOBBLE_SPEED) * (CONFIG.WOBBLE_STRENGTH);
-    const vx = Math.cos(rad) * fish.speed * dt;
-    const vy = Math.sin(rad) * fish.speed * dt;
+    // 前進のみ
+    const rad = f.angle * DEG2RAD;
+    const vx = Math.cos(rad) * f.speed * dt;
+    const vy = Math.sin(rad) * f.speed * dt;
 
-    fish.x += vx;
-    fish.y += vy;
+    let nx = f.x + vx;
+    let ny = f.y + vy;
 
-    // 位置
-    fish.x = clamp(fish.x, CONFIG.EDGE_MARGIN, w - CONFIG.EDGE_MARGIN);
-    fish.y = clamp(fish.y, CONFIG.EDGE_MARGIN, h - CONFIG.EDGE_MARGIN);
+    // 境界処理：はみ出し前に押し戻し＆内向き目標へ切替
+    let bumped = false;
+    const M = CONFIG.EDGE_MARGIN;
 
-    // 進行方向＋見た目の微小ローリング（見た目だけの揺れ。進路は変えない）
-    const displayAngle = fish.angle + 90 + (wob * 0.05);
+    if(nx < M){ nx = M + CONFIG.NUDGE_INWARD; bumped = true; }
+    if(nx > w - M){ nx = w - M - CONFIG.NUDGE_INWARD; bumped = true; }
+    if(ny < M){ ny = M + CONFIG.NUDGE_INWARD; bumped = true; }
+    if(ny > h - M){ ny = h - M - CONFIG.NUDGE_INWARD; bumped = true; }
 
-    fish.el.style.left = fish.x + 'px';
-    fish.el.style.top  = fish.y + 'px';
-    fish.el.style.transform = `rotate(${displayAngle}deg)`;
+    f.x = nx; f.y = ny;
+
+    if(bumped){
+      // 即座に内側目標へ変更し、向きも内側へ素早く向ける
+      forceInwardGoal(f);
+      const inward = Math.atan2(h/2 - f.y, w/2 - f.x) * RAD2DEG;
+      f.angle = stepAngle(f.angle, inward, CONFIG.TURN_RATE); // 1フレーム強制気味に内側へ
+    }
+
+    // 目標に到達したら次の目標
+    const dx = f.target.x - f.x, dy = f.target.y - f.y;
+    if(Math.hypot(dx,dy) < CONFIG.GOAL_RADIUS){
+      f.target = insideBox(w,h);
+      f.nextRetarget = now + rand(CONFIG.RETARGET_SEC[0], CONFIG.RETARGET_SEC[1]) * 1000;
+    }
+
+    // 見た目の回転（画像上が頭なので +90°）。軽いローリングのみ付与
+    const roll = Math.sin((now/1000 + f.seed)*2*Math.PI*CONFIG.WOBBLE_SPEED) * CONFIG.WOBBLE_DEG;
+    f.el.style.left = f.x + 'px';
+    f.el.style.top  = f.y + 'px';
+    f.el.style.transform = `rotate(${f.angle + 90 + roll}deg)`;
   }
-
   requestAnimationFrame(tick);
 }
 
-/* 初期スポーン */
+/* 初期化 */
 function init(){
-  const count = Math.min(CONFIG.FISH_MAX_COUNT,
-                         parseInt(getComputedStyle(document.documentElement).getPropertyValue('--fish-max')) || CONFIG.FISH_MAX_COUNT);
-  for(let i=0;i<count;i++) spawnFish();
+  const want = Math.min(CONFIG.FISH_MAX_COUNT,
+    parseInt(getComputedStyle(document.documentElement).getPropertyValue('--fish-max')) || CONFIG.FISH_MAX_COUNT);
+  for(let i=0;i<want;i++) spawnFish();
   requestAnimationFrame(tick);
 }
-window.addEventListener('load', init);
+addEventListener('load', init);
+addEventListener('resize', ()=> {
+  // 画面サイズ変化時も全員が安全域にいるように少しだけ内側へ
+  for(const f of FISHES){
+    f.x = clamp(f.x, CONFIG.EDGE_MARGIN, stage.clientWidth - CONFIG.EDGE_MARGIN);
+    f.y = clamp(f.y, CONFIG.EDGE_MARGIN, stage.clientHeight - CONFIG.EDGE_MARGIN);
+    forceInwardGoal(f);
+  }
+});
 </script>
 </body>
 </html>
