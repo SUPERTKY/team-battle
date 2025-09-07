@@ -3,29 +3,17 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>TURI – 柔らかいカースティクス</title>
+<title>TURI – 魚ランダム移動</title>
 <style>
   :root{
     --stage-w: min(1280px, 94vw);
     --ratio: 16/9;
+    --fish-max: 5; /* 魚の同時出現上限 */
+  }
+  *{ box-sizing: border-box; }
+  html,body{ margin:0; height:100%; background:#05121a; }
 
-    --water-opacity: .80;     /* 水層の不透明度 */
-    --tint-color: #19b5c1;    /* 水色のティント */
-    --tint-alpha: .22;        /* ティント濃度 */
-    --caustics-alpha: .25;    /* 光の筋の濃度 */
-  }
-
-  *{ box-sizing: border-box }
-  html,body{
-    height:100%; margin:0;
-    background:#05121a;
-    font-family: system-ui, sans-serif;
-  }
-  .wrap{
-    min-height:100%;
-    display:grid; place-items:center;
-    padding:16px;
-  }
+  .wrap{ min-height:100%; display:grid; place-items:center; padding:16px; }
 
   .stage{
     position:relative;
@@ -36,62 +24,134 @@
     background:#000;
     box-shadow: 0 18px 48px rgba(0,0,0,.45);
   }
-  .layer{
-    position:absolute; inset:0;
-    width:100%; height:100%;
-    object-fit: cover;
-    display:block;
-    pointer-events:none;
-  }
+  .layer{ position:absolute; inset:0; width:100%; height:100%; object-fit:cover; pointer-events:none; }
 
-  /* レイヤー順 */
-  #sand{ z-index: 1; }
-  #waterBase{ z-index: 2; opacity: var(--water-opacity); }
-  .tint{ z-index: 3; mix-blend-mode: multiply; background: color-mix(in srgb, var(--tint-color) calc(var(--tint-alpha)*100%), transparent); }
-  .caustics{ z-index: 4; opacity: var(--caustics-alpha); mix-blend-mode: screen; background:#000; }
-  #fish{ display:none; }
+  /* 背景レイヤー */
+  #sand{ z-index:1; }
+  #waterBase{ z-index:2; opacity:.8; }
+  .tint{ z-index:3; mix-blend-mode:multiply; background:rgba(25,181,193,.22); }
+  .caustics{ z-index:4; opacity:.25; mix-blend-mode:screen; background:#000; }
+
+  /* 魚レイヤーコンテナ */
+  #fishLayer{ z-index:5; pointer-events:none; }
+
+  .fish{
+    position:absolute;
+    width:80px; /* サイズ調整可能 */
+    transform-origin:center center;
+    opacity:0.9;
+    will-change: transform, top, left;
+  }
 </style>
 </head>
 <body>
   <main class="wrap">
-    <section class="stage">
-      <!-- 背面：砂 -->
+    <section class="stage" id="stage">
+      <!-- 背景 -->
       <img id="sand" class="layer" src="assets/sand.png" alt="砂">
-      <!-- 水のベース -->
       <img id="waterBase" class="layer" src="assets/water_background_80percent.png" alt="水">
-      <!-- ティント -->
       <div class="layer tint"></div>
-      <!-- 柔らかいカースティクス -->
       <div class="layer caustics"></div>
-      <!-- 魚はまだ非表示 -->
-      <img id="fish" class="layer" src="assets/fish.png" alt="魚影">
+
+      <!-- 魚たちを追加するコンテナ -->
+      <div id="fishLayer"></div>
     </section>
   </main>
 
-  <!-- SVGフィルタ：柔らかい水の光模様 -->
+  <!-- 柔らかいカースティクス -->
   <svg width="0" height="0">
     <filter id="causticsFilter">
-      <!-- 大きくて柔らかいノイズ -->
       <feTurbulence type="fractalNoise" baseFrequency="0.005 0.02"
         numOctaves="2" seed="5" result="noise">
-        <!-- 横方向にゆっくり流す -->
         <animateTransform attributeName="patternTransform"
           type="translate" from="0 0" to="200 0"
           dur="30s" repeatCount="indefinite"/>
       </feTurbulence>
-      <!-- コントラスト強調を弱めに -->
       <feColorMatrix type="matrix" values="
         1 0 0 0 0
         0 1 0 0 0
         0 0 1 0 0
         0 0 0 6 -3" result="contrast"/>
-      <!-- 柔らかくぼかす -->
       <feGaussianBlur stdDeviation="1.2"/>
     </filter>
   </svg>
+  <style>.caustics{ filter:url(#causticsFilter); }</style>
 
-  <style>
-    .caustics{ filter:url(#causticsFilter); }
-  </style>
+<script>
+const fishLayer = document.getElementById("fishLayer");
+const stage = document.getElementById("stage");
+const maxFish = parseInt(getComputedStyle(document.documentElement).getPropertyValue("--fish-max"));
+
+const fishImgSrc = "assets/fish.png";
+
+/** 魚を生成して動かす */
+function spawnFish(){
+  if(fishLayer.children.length >= maxFish) return;
+
+  const fish = document.createElement("img");
+  fish.src = fishImgSrc;
+  fish.className = "fish";
+
+  // 初期位置：左右どちらかの外
+  const fromLeft = Math.random() < 0.5;
+  const startY = Math.random() * 80 + 10; // 上から10〜90%
+  fish.style.top = startY + "%";
+  fish.style.left = fromLeft ? "-10%" : "110%";
+
+  // 向き調整：画像の上が頭なので、進行方向に回転
+  const angle = fromLeft ? 90 : -90; // 左→右なら右向き、右→左なら左向き
+  fish.style.transform = `rotate(${angle}deg)`;
+
+  fishLayer.appendChild(fish);
+
+  moveFish(fish, fromLeft);
+}
+
+/** 魚をランダムに動かす */
+function moveFish(fish, fromLeft){
+  const stageW = stage.clientWidth;
+  const stageH = stage.clientHeight;
+
+  // ゴール位置（画面外）
+  const targetX = fromLeft ? stageW + 100 : -100;
+  const targetY = Math.random() * (stageH*0.6) + stageH*0.2; // 下寄りに泳ぐ
+
+  // 移動時間（スピード）
+  const duration = 8000 + Math.random()*4000; // 8〜12秒
+
+  const start = performance.now();
+
+  function animate(now){
+    const t = Math.min((now - start) / duration, 1);
+    // イージング：ゆったり
+    const ease = t<0.5 ? 2*t*t : -1+(4-2*t)*t;
+
+    const startX = fromLeft ? -100 : stageW+100;
+    const startY = parseFloat(fish.style.top)/100*stageH;
+
+    const x = startX + (targetX - startX) * ease;
+    const y = startY + (targetY - startY) * ease + Math.sin(t*6*Math.PI)*20; // 上下ゆらぎ
+
+    fish.style.left = x + "px";
+    fish.style.top = y + "px";
+
+    // 進行方向に合わせて少し角度調整
+    const dx = (targetX - startX);
+    const dy = (targetY - startY);
+    const dir = Math.atan2(dy, dx) * 180/Math.PI;
+    fish.style.transform = `rotate(${dir}deg)`;
+
+    if(t<1){
+      requestAnimationFrame(animate);
+    }else{
+      fish.remove();
+    }
+  }
+  requestAnimationFrame(animate);
+}
+
+// 定期的に魚を出す
+setInterval(spawnFish, 3000); // 3秒おきに挑戦
+</script>
 </body>
 </html>
