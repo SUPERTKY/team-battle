@@ -122,272 +122,173 @@
   </svg>
 
 <script>
-/* ================= 調整パラメータ ================= */
 const CONFIG = {
-  FISH_MIN_SIZE: 110,     // px（最小）
-  FISH_MAX_SIZE: 220,     // px（最大）
-  FISH_MAX_COUNT: 6,      // 同時数
+  FISH_MIN_SIZE: 100,
+  FISH_MAX_SIZE: 200,
+  FISH_MAX_COUNT: 6,
 
-  BASE_SPEED: 110,        // 通常速度（px/s）※サイズで補正
-  TURN_RATE: 160,         // 旋回（度/秒）
-  EDGE_MARGIN: 56,        // 端の安全域
-  RETARGET_SEC: [2.6, 5.2],
-  GOAL_RADIUS: 18,
-  NUDGE_INWARD: 14,
+  BASE_SPEED: 160,
+  TURN_RATE: 180,
+  EDGE_MARGIN: 50,
+  RETARGET_SEC: [2, 4],
+  GOAL_RADIUS: 16,
 
   // タップ関連
-  TAP_COOLDOWN_MS: 90,    // 連打による多重判定の抑制
-  TAP_IFRAME_MS: 120,     // 同一魚への連続タップ無効時間（誤多重防止）
+  HP_MIN: 2,
+  HP_MAX: 5,
+  SPEED_BOOST: 1.3,      // タップ毎の速度倍率
+  SPEED_MAX: 4.0,        // 最大速度倍率
+  VANISH_TIME_RANGE: [800, 2000], // 1回目タップ後の消滅時間(ms)
 
-  // 逃走（ダッシュ）
-  DASH_BASE: 260,         // ダッシュ基礎速度（サイズで更に上乗せ）
-  DASH_TIME: 420,         // ダッシュ継続(ms)
-
-  // 消える確率（初回タップ以降）…サイズで上乗せ
-  VANISH_BASE: 0.12,
-  VANISH_BY_SIZE: 0.20,   // （幅が最小→最大で）+0〜この値を加算
-
-  // スコア
   SCORE_PER_CATCH: 10
 };
-/* ================================================== */
 
-const stage = document.getElementById('stage');
-const fishLayer = document.getElementById('fishLayer');
-const scoreEl = document.getElementById('score');
-const fishImgSrc = 'assets/fish.png';
+const stage = document.getElementById("stage");
+const fishLayer = document.getElementById("fishLayer");
+const scoreEl = document.getElementById("score");
+const fishImgSrc = "assets/fish.png";
 
-const FISHES = []; // {el,x,y,angle,width,speed,target,nextRetarget,seed,alive,hp,lastTapAt,dashUntil,vanishable}
-let lastT = performance.now();
-let lastTapAt = 0;
 let score = 0;
+const FISHES = [];
 
-/* utils */
-const DEG2RAD = Math.PI/180;
-const clamp=(v,min,max)=>Math.max(min,Math.min(max,v));
-const lerp=(a,b,t)=>a+(b-a)*t;
-const rand=(a,b)=>Math.random()*(b-a)+a;
+function rand(min,max){ return Math.random()*(max-min)+min; }
+function clamp(v,min,max){ return Math.max(min,Math.min(max,v)); }
+function lerp(a,b,t){ return a+(b-a)*t; }
 
-function insideBox(w,h){ return {
-  x: rand(CONFIG.EDGE_MARGIN, w - CONFIG.EDGE_MARGIN),
-  y: rand(CONFIG.EDGE_MARGIN, h - CONFIG.EDGE_MARGIN)
-};}
+function insideBox(w,h){
+  return {
+    x: rand(CONFIG.EDGE_MARGIN, w-CONFIG.EDGE_MARGIN),
+    y: rand(CONFIG.EDGE_MARGIN, h-CONFIG.EDGE_MARGIN)
+  };
+}
+
 function stepAngle(cur, target, maxStep){
   let diff = ((target - cur + 540) % 360) - 180;
   return cur + clamp(diff, -maxStep, maxStep);
 }
-function makeSplash(x,y){
-  const sp = document.createElement('div');
-  sp.className = 'splash';
-  sp.style.left = x + 'px';
-  sp.style.top  = y + 'px';
-  stage.appendChild(sp);
-  sp.addEventListener('animationend', ()=> sp.remove());
-}
-function addScore(v){ score = Math.max(0, score + v); scoreEl.textContent = score; }
 
-/* サイズ→難易度マップ */
-function tapsNeededBySize(width){
-  // 最小→最大で 2→4 回（好みに合わせて調整OK）
-  const t = (width - CONFIG.FISH_MIN_SIZE) / Math.max(1, CONFIG.FISH_MAX_SIZE - CONFIG.FISH_MIN_SIZE);
-  return Math.round(lerp(2, 4, clamp(t,0,1)));
-}
-function speedBySize(width){
-  // 大きいほどやや速い（通常時）
-  const t = (width - CONFIG.FISH_MIN_SIZE) / Math.max(1, CONFIG.FISH_MAX_SIZE - CONFIG.FISH_MIN_SIZE);
-  return CONFIG.BASE_SPEED * lerp(1.02, 1.18, clamp(t,0,1));
-}
-function dashSpeedBySize(width){
-  const t = (width - CONFIG.FISH_MIN_SIZE) / Math.max(1, CONFIG.FISH_MAX_SIZE - CONFIG.FISH_MIN_SIZE);
-  return CONFIG.DASH_BASE * lerp(1.0, 1.35, clamp(t,0,1));
-}
-function vanishChance(width){
-  const t = (width - CONFIG.FISH_MIN_SIZE) / Math.max(1, CONFIG.FISH_MAX_SIZE - CONFIG.FISH_MIN_SIZE);
-  return clamp(CONFIG.VANISH_BASE + CONFIG.VANISH_BY_SIZE * t, 0, 0.6);
-}
-
-/* スポーン */
+/* spawn */
 function spawnFish(){
   if(FISHES.length >= CONFIG.FISH_MAX_COUNT) return;
 
-  const el = document.createElement('img');
+  const el = document.createElement("img");
   el.src = fishImgSrc;
-  el.className = 'fish';
+  el.className = "fish";
+  el.style.pointerEvents = "auto";
 
   const w = stage.clientWidth, h = stage.clientHeight;
   const pos = insideBox(w,h);
 
   const width = rand(CONFIG.FISH_MIN_SIZE, CONFIG.FISH_MAX_SIZE);
-  el.style.width = width + 'px';
-  el.style.left = pos.x + 'px';
-  el.style.top  = pos.y + 'px';
+  el.style.width = width+"px";
+  el.style.left = pos.x+"px";
+  el.style.top  = pos.y+"px";
 
-  // 進行方向：やや中心へ
-  const cx=w/2, cy=h/2;
-  let angle = Math.atan2(cy - pos.y, cx - pos.x) * 180/Math.PI + rand(-35,35);
-  el.style.setProperty('--rot0', `rotate(${angle + 90}deg)`); // shake/vanish用に回転角をCSS変数に持たせる
-  el.style.transform = `rotate(${angle + 90}deg)`;
-
-  fishLayer.appendChild(el);
+  const hp = Math.round(lerp(CONFIG.HP_MIN, CONFIG.HP_MAX,
+                (width - CONFIG.FISH_MIN_SIZE) / (CONFIG.FISH_MAX_SIZE-CONFIG.FISH_MIN_SIZE)));
 
   const f = {
-    el, x: pos.x, y: pos.y, angle,
+    el,
+    x: pos.x, y: pos.y,
     width,
-    speed: speedBySize(width),
+    angle: rand(0,360),
+    speed: CONFIG.BASE_SPEED,
     target: insideBox(w,h),
-    nextRetarget: performance.now() + rand(CONFIG.RETARGET_SEC[0], CONFIG.RETARGET_SEC[1]) * 1000,
-    seed: Math.random()*1000,
-    alive: true,
-    hp: tapsNeededBySize(width),
-    lastTapAt: 0,
-    dashUntil: 0,
-    vanishable: false // 最初のタップが入るまでは消えない
+    nextRetarget: performance.now() + rand(CONFIG.RETARGET_SEC[0],CONFIG.RETARGET_SEC[1])*1000,
+    hp,
+    alive:true,
+    vanishTimer:null,
+    vanishAt: null
   };
   FISHES.push(f);
+  fishLayer.appendChild(el);
 
-  // タップでHP減→揺れ→強いダッシュ→（以後）消える可能性
-  el.addEventListener('pointerdown', (ev)=>{
-    const now = performance.now();
+  // タップ時
+  el.addEventListener("pointerdown",(ev)=>{
     if(!f.alive) return;
-    if(now - lastTapAt < CONFIG.TAP_COOLDOWN_MS) return; // 全体連打抑制
-    if(now - f.lastTapAt < CONFIG.TAP_IFRAME_MS) return; // 同一魚の多重ヒット抑制
-    lastTapAt = now;
-    f.lastTapAt = now;
+    f.hp--;
 
-    // 水しぶき
-    const rect = stage.getBoundingClientRect();
-    makeSplash(ev.clientX - rect.left, ev.clientY - rect.top);
-
-    // ダメージ
-    f.hp -= 1;
-
-    // 小さく揺れる
-    el.classList.remove('shake'); // 連続用にリセット
-    void el.offsetWidth;
-    el.classList.add('shake');
-
-    // タップ位置から離れる方向に強いダッシュ
-    const away = Math.atan2((f.y) - (ev.clientY - rect.top), (f.x) - (ev.clientX - rect.left));
-    const dashSpd = dashSpeedBySize(f.width);
-    f.target = {
-      x: clamp(f.x + Math.cos(away)*220, CONFIG.EDGE_MARGIN, stage.clientWidth  - CONFIG.EDGE_MARGIN),
-      y: clamp(f.y + Math.sin(away)*220, CONFIG.EDGE_MARGIN, stage.clientHeight - CONFIG.EDGE_MARGIN)
-    };
-    f.dashUntil = now + CONFIG.DASH_TIME;
-
-    // 以後は“シュッと消える”可能性が出る
-    if(!f.vanishable) f.vanishable = true;
-    if(f.vanishable && f.hp > 0){
-      const p = vanishChance(f.width);
-      if(Math.random() < p){
-        // 自然に消滅
-        f.alive = false;
-        el.classList.add('vanish');
-        setTimeout(()=>{
-          const idx = FISHES.indexOf(f);
-          if(idx !== -1) FISHES.splice(idx,1);
-          el.remove();
-          spawnFish();
-        }, 280);
-        return;
-      }
+    // 初回タップで「消滅タイマー」セット
+    if(!f.vanishTimer){
+      const vanishDelay = rand(CONFIG.VANISH_TIME_RANGE[0], CONFIG.VANISH_TIME_RANGE[1]);
+      f.vanishAt = performance.now() + vanishDelay;
+      f.vanishTimer = true;
     }
 
-    // 仕留めた（HP尽きた）
+    // 速度アップ
+    f.speed = Math.min(f.speed*CONFIG.SPEED_BOOST, CONFIG.BASE_SPEED*CONFIG.SPEED_MAX);
+
+    // 捕獲成功
     if(f.hp <= 0){
-      f.alive = false;
+      f.alive=false;
       addScore(CONFIG.SCORE_PER_CATCH);
-      el.classList.add('vanish'); // 捕獲時も“シュッ”演出でOK
-      setTimeout(()=>{
-        const idx = FISHES.indexOf(f);
-        if(idx !== -1) FISHES.splice(idx,1);
-        el.remove();
-        spawnFish();
-      }, 280);
+      vanishFish(f,true);
     }
-  }, {passive:true});
+  });
 }
 
-/* 進行管理 */
-function forceInwardGoal(f){
-  const w = stage.clientWidth, h = stage.clientHeight;
-  const cx=w/2, cy=h/2;
-  const dir = Math.atan2(cy - f.y, cx - f.x);
-  const dist = 120 + Math.random()*180;
-  f.target = {
-    x: clamp(f.x + Math.cos(dir)*dist, CONFIG.EDGE_MARGIN, w - CONFIG.EDGE_MARGIN),
-    y: clamp(f.y + Math.sin(dir)*dist, CONFIG.EDGE_MARGIN, h - CONFIG.EDGE_MARGIN)
-  };
-  f.nextRetarget = performance.now() + rand(CONFIG.RETARGET_SEC[0], CONFIG.RETARGET_SEC[1]) * 1000;
+function vanishFish(f, caught=false){
+  f.el.classList.add("vanish");
+  setTimeout(()=>{
+    const idx = FISHES.indexOf(f);
+    if(idx !== -1) FISHES.splice(idx,1);
+    f.el.remove();
+    if(!caught) console.log("逃げられた！");
+    spawnFish();
+  },280);
 }
 
+function addScore(v){
+  score+=v;
+  scoreEl.textContent=score;
+}
+
+/* 動き */
+let last = performance.now();
 function tick(now){
-  const dt = (now - lastT) / 1000; lastT = now;
+  const dt=(now-last)/1000; last=now;
   const w = stage.clientWidth, h = stage.clientHeight;
 
   for(const f of FISHES){
     if(!f.alive) continue;
 
-    if(now >= f.nextRetarget){
-      f.target = insideBox(w,h);
-      f.nextRetarget = now + rand(CONFIG.RETARGET_SEC[0], CONFIG.RETARGET_SEC[1]) * 1000;
+    // vanish時間判定
+    if(f.vanishAt && now>=f.vanishAt){
+      f.alive=false;
+      vanishFish(f,false);
+      continue;
     }
 
-    const desired = Math.atan2(f.target.y - f.y, f.target.x - f.x) * 180/Math.PI;
-    const maxTurn = CONFIG.TURN_RATE * dt;
-    f.angle = stepAngle(f.angle, desired, maxTurn);
-
-    const rad = f.angle * DEG2RAD;
-    const spd = (now < f.dashUntil) ? dashSpeedBySize(f.width) : f.speed;
-    const vx = Math.cos(rad) * spd * dt;
-    const vy = Math.sin(rad) * spd * dt;
-
-    let nx = f.x + vx, ny = f.y + vy;
-
-    let bumped = false;
-    const M = CONFIG.EDGE_MARGIN;
-    if(nx < M){ nx = M + CONFIG.NUDGE_INWARD; bumped = true; }
-    if(nx > w - M){ nx = w - M - CONFIG.NUDGE_INWARD; bumped = true; }
-    if(ny < M){ ny = M + CONFIG.NUDGE_INWARD; bumped = true; }
-    if(ny > h - M){ ny = h - M - CONFIG.NUDGE_INWARD; bumped = true; }
-
-    f.x = nx; f.y = ny;
-    if(bumped){
-      forceInwardGoal(f);
-      f.dashUntil = performance.now() + 220; // 壁近くはスッと内へ
+    if(now>=f.nextRetarget){
+      f.target=insideBox(w,h);
+      f.nextRetarget=now+rand(CONFIG.RETARGET_SEC[0],CONFIG.RETARGET_SEC[1])*1000;
     }
 
-    if(Math.hypot(f.target.x - f.x, f.target.y - f.y) < CONFIG.GOAL_RADIUS){
-      f.target = insideBox(w,h);
-      f.nextRetarget = now + rand(CONFIG.RETARGET_SEC[0], CONFIG.RETARGET_SEC[1]) * 1000;
-    }
+    const desired=Math.atan2(f.target.y-f.y, f.target.x-f.x)*180/Math.PI;
+    f.angle=stepAngle(f.angle,desired,CONFIG.TURN_RATE*dt);
 
-    f.el.style.left = f.x + 'px';
-    f.el.style.top  = f.y + 'px';
-    const visualRot = f.angle + 90;
-    f.el.style.setProperty('--rot0', `rotate(${visualRot}deg)`);
-    f.el.style.transform = `rotate(${visualRot}deg)`;
+    const rad=f.angle*Math.PI/180;
+    f.x+=Math.cos(rad)*f.speed*dt;
+    f.y+=Math.sin(rad)*f.speed*dt;
+
+    f.x=clamp(f.x, CONFIG.EDGE_MARGIN, w-CONFIG.EDGE_MARGIN);
+    f.y=clamp(f.y, CONFIG.EDGE_MARGIN, h-CONFIG.EDGE_MARGIN);
+
+    f.el.style.left=f.x+"px";
+    f.el.style.top=f.y+"px";
+    f.el.style.transform=`rotate(${f.angle+90}deg)`;
   }
 
   requestAnimationFrame(tick);
 }
 
-/* 初期化 */
 function init(){
-  const want = Math.min(CONFIG.FISH_MAX_COUNT,
-    parseInt(getComputedStyle(document.documentElement).getPropertyValue('--fish-max')) || CONFIG.FISH_MAX_COUNT);
-  for(let i=0;i<want;i++) spawnFish();
+  for(let i=0;i<CONFIG.FISH_MAX_COUNT;i++) spawnFish();
   requestAnimationFrame(tick);
 }
-addEventListener('load', init);
-
-addEventListener('resize', ()=>{
-  for(const f of FISHES){
-    f.x = clamp(f.x, CONFIG.EDGE_MARGIN, stage.clientWidth - CONFIG.EDGE_MARGIN);
-    f.y = clamp(f.y, CONFIG.EDGE_MARGIN, stage.clientHeight - CONFIG.EDGE_MARGIN);
-    forceInwardGoal(f);
-  }
-});
+window.addEventListener("load",init);
 </script>
+
 </body>
 </html>
+
