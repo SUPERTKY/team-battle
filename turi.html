@@ -33,15 +33,22 @@
   .caustics{ z-index:4; opacity:.25; mix-blend-mode:screen; background:#000; }
 
   /* 魚レイヤーコンテナ */
-  #fishLayer{ z-index:5; pointer-events:none; }
+ /* 魚レイヤーコンテナ */
+#fishLayer {
+  z-index: 10;      /* 最前面に配置 */
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
 
-  .fish{
-    position:absolute;
-    width:80px; /* サイズ調整可能 */
-    transform-origin:center center;
-    opacity:0.9;
-    will-change: transform, top, left;
-  }
+.fish {
+  position: absolute;
+  width: 80px;
+  transform-origin: center center;
+  opacity: 0.9;
+  will-change: transform, top, left;
+}
+
 </style>
 </head>
 <body>
@@ -156,3 +163,4 @@ for(let i=0;i<maxFish;i++){
 </script>
 </body>
 </html>
+
