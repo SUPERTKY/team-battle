@@ -3,9 +3,8 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>TURI – 超ムズ完全版</title>
+<title>TURI – 超ムズ完全版（速度×2）</title>
 <style>
-  /* 画面いっぱいに描画（黒帯なし） */
   html,body{ margin:0; height:100%; background:#05121a; overflow:hidden; }
   .stage{
     position:relative;
@@ -14,7 +13,7 @@
     background:#000;
   }
 
-  /* 背景レイヤー（残します！） */
+  /* 背景 */
   .layer{
     position:absolute; inset:0;
     width:100%; height:100%;
@@ -26,17 +25,17 @@
   .tint{ z-index:3; mix-blend-mode:multiply; background:rgba(25,181,193,.22); }
   .caustics{ z-index:4; opacity:.25; mix-blend-mode:screen; background:#000; filter:url(#causticsFilter); }
 
-  /* 魚は最前面・タップ可能 */
+  /* 魚 */
   #fishLayer{ position:absolute; inset:0; z-index:10; pointer-events:none; }
   .fish{
     position:absolute;
     transform-origin:center center;
     pointer-events:auto;
     user-select:none;
+    -webkit-user-drag: none; /* ← ドラッグ禁止 */
     will-change:left, top, transform;
   }
 
-  /* タップ時の軽い揺れ（自然なビクつき） */
   .shake{ animation: shake .22s ease-out; }
   @keyframes shake{
     0%{   transform: var(--rot0) translate(0,0) }
@@ -45,13 +44,11 @@
     100%{ transform: var(--rot0) translate(0,0) }
   }
 
-  /* シュッと消える（縮小＋フェード＋軽いブラー） */
   .vanish{ animation: vanish .25s ease forwards; }
   @keyframes vanish{
     to{ opacity:0; transform: var(--rot0) scale(.65); filter:blur(2px); }
   }
 
-  /* クリック水しぶき（演出） */
   .splash{
     position:absolute; width:10px; height:10px; border-radius:50%;
     left:0; top:0; transform: translate(-50%,-50%);
@@ -65,18 +62,14 @@
 </style>
 </head>
 <body>
-  <section class="stage" id="stage" aria-label="釣りステージ">
-    <!-- 背景（残す） -->
+  <section class="stage" id="stage">
     <img id="sand" class="layer" src="assets/sand.png" alt="砂">
     <img id="waterBase" class="layer" src="assets/water_background_80percent.png" alt="水">
-    <div class="layer tint" aria-hidden="true"></div>
-    <div class="layer caustics" aria-hidden="true"></div>
-
-    <!-- 魚 -->
-    <div id="fishLayer" aria-label="魚レイヤー"></div>
+    <div class="layer tint"></div>
+    <div class="layer caustics"></div>
+    <div id="fishLayer"></div>
   </section>
 
-  <!-- 柔らかいカースティクス（残す） -->
   <svg width="0" height="0" style="position:absolute">
     <filter id="causticsFilter">
       <feTurbulence type="fractalNoise" baseFrequency="0.005 0.02"
@@ -95,237 +88,150 @@
   </svg>
 
 <script>
-/* ===================== 超ムズ調整 ===================== */
 const CONFIG = {
-  /* サイズ（＝難易度の基礎）：大きいほどHP多い */
   FISH_MIN_SIZE: 100,
   FISH_MAX_SIZE: 220,
   FISH_MAX_COUNT: 6,
 
-  /* スピード（初速を高く、タップごとに加速、上限も高め） */
-  BASE_SPEED: 280,       // 初速（速い！）
-  SPEED_BOOST: 1.45,     // 1タップごと速度×1.45
-  SPEED_MAX: 6.0,        // 最大：初速の6倍まで
-  TURN_RATE: 220,        // 旋回（度/秒）→キビキビ
-  RETARGET_SEC: [1.0, 2.0], // 頻繁に進路変更
+  BASE_SPEED: 560,       // ★ 初速を2倍（280→560）
+  SPEED_BOOST: 1.5,      // ★ 加速倍率もUP（1.45→1.5）
+  SPEED_MAX: 8.0,        // ★ 最大8倍速まで許可
+  TURN_RATE: 240,
+  RETARGET_SEC: [0.8, 1.6], // ★進路変更もさらに頻繁に
   EDGE_MARGIN: 48,
   GOAL_RADIUS: 14,
 
-  /* タップ仕様：初回タップで寿命タイマー起動（かなり短い） */
-  HP_MIN: 3,             // 小魚：必要タップ数
-  HP_MAX: 6,             // 大魚：必要タップ数
-  VANISH_TIME_RANGE: [550, 1200], // 1回目タップ後の寿命(ms)
+  HP_MIN: 3,
+  HP_MAX: 6,
+  VANISH_TIME_RANGE: [450, 1000], // ★消滅までの猶予も短縮（0.45〜1.0秒）
 
-  /* ダッシュ演出（タップ位置から離れる方向へ瞬間逃げ） */
-  DASH_DIST: 220,        // 逃げる距離（px）
-  DASH_TIME: 260         // “壁近くで内側へ”微調整(ms)
+  DASH_DIST: 240,
+  DASH_TIME: 240
 };
-/* ===================================================== */
 
 const stage = document.getElementById('stage');
 const fishLayer = document.getElementById('fishLayer');
 const fishImgSrc = 'assets/fish.png';
+const FISHES = [];
 
-const FISHES = []; // {el,x,y,angle,width,speed,target,nextRetarget,seed,hp,alive,vanishAt,dashUntil}
-let lastT = performance.now();
-
-/* ユーティリティ */
 const DEG2RAD = Math.PI/180;
-const clamp = (v,min,max)=> Math.max(min, Math.min(max,v));
-const lerp  = (a,b,t)=> a+(b-a)*t;
-const rand  = (a,b)=> Math.random()*(b-a)+a;
+const clamp=(v,min,max)=>Math.max(min,Math.min(max,v));
+const lerp=(a,b,t)=>a+(b-a)*t;
+const rand=(a,b)=>Math.random()*(b-a)+a;
 
 function insideBox(w,h){
-  return {
-    x: rand(CONFIG.EDGE_MARGIN, w - CONFIG.EDGE_MARGIN),
-    y: rand(CONFIG.EDGE_MARGIN, h - CONFIG.EDGE_MARGIN)
-  };
+  return {x:rand(CONFIG.EDGE_MARGIN,w-CONFIG.EDGE_MARGIN),
+          y:rand(CONFIG.EDGE_MARGIN,h-CONFIG.EDGE_MARGIN)};
 }
-function stepAngle(cur, target, maxStep){
-  let diff = ((target - cur + 540) % 360) - 180;
-  return cur + clamp(diff, -maxStep, maxStep);
+function stepAngle(cur,target,maxStep){
+  let diff=((target-cur+540)%360)-180;
+  return cur+clamp(diff,-maxStep,maxStep);
 }
 function makeSplash(x,y){
-  const sp = document.createElement('div');
-  sp.className = 'splash';
-  sp.style.left = x + 'px';
-  sp.style.top  = y + 'px';
+  const sp=document.createElement('div');
+  sp.className='splash';
+  sp.style.left=x+'px';
+  sp.style.top=y+'px';
   stage.appendChild(sp);
-  sp.addEventListener('animationend', ()=> sp.remove());
+  sp.addEventListener('animationend',()=>sp.remove());
 }
 
-/* スポーン（背景はそのまま、魚だけ追加） */
+/* spawn */
 function spawnFish(){
-  if(FISHES.length >= CONFIG.FISH_MAX_COUNT) return;
-
-  const el = document.createElement('img');
-  el.src = fishImgSrc;
-  el.className = 'fish';
-
-  const w = stage.clientWidth, h = stage.clientHeight;
-  const pos = insideBox(w,h);
-  const width = rand(CONFIG.FISH_MIN_SIZE, CONFIG.FISH_MAX_SIZE);
-
-  el.style.width = width + 'px';
-  el.style.left  = pos.x + 'px';
-  el.style.top   = pos.y + 'px';
+  if(FISHES.length>=CONFIG.FISH_MAX_COUNT) return;
+  const el=document.createElement('img');
+  el.src=fishImgSrc;
+  el.className='fish';
+  el.draggable=false; // ★画像ドラッグ禁止
+  const w=stage.clientWidth,h=stage.clientHeight;
+  const pos=insideBox(w,h);
+  const size=rand(CONFIG.FISH_MIN_SIZE,CONFIG.FISH_MAX_SIZE);
+  el.style.width=size+'px';
+  el.style.left=pos.x+'px';
+  el.style.top=pos.y+'px';
   fishLayer.appendChild(el);
 
-  const hp = Math.round(lerp(CONFIG.HP_MIN, CONFIG.HP_MAX,
-              (width - CONFIG.FISH_MIN_SIZE) / Math.max(1, CONFIG.FISH_MAX_SIZE - CONFIG.FISH_MIN_SIZE)));
+  const hp=Math.round(lerp(CONFIG.HP_MIN,CONFIG.HP_MAX,
+              (size-CONFIG.FISH_MIN_SIZE)/(CONFIG.FISH_MAX_SIZE-CONFIG.FISH_MIN_SIZE)));
 
-  // 初期向き（やや中心へ＋ランダム）
   const cx=w/2, cy=h/2;
-  let angle = Math.atan2(cy - pos.y, cx - pos.x) * 180/Math.PI + rand(-35,35);
-  el.style.setProperty('--rot0', `rotate(${angle + 90}deg)`);
-  el.style.transform = `rotate(${angle + 90}deg)`;
+  let angle=Math.atan2(cy-pos.y,cx-pos.x)*180/Math.PI+rand(-35,35);
+  el.style.setProperty('--rot0',`rotate(${angle+90}deg)`);
+  el.style.transform=`rotate(${angle+90}deg)`;
 
-  const f = {
-    el, x: pos.x, y: pos.y, angle,
-    width,
-    speed: CONFIG.BASE_SPEED,
-    target: insideBox(w,h),
-    nextRetarget: performance.now() + rand(CONFIG.RETARGET_SEC[0], CONFIG.RETARGET_SEC[1]) * 1000,
-    seed: Math.random()*1000,
-    hp, alive: true,
-    vanishAt: null,
-    dashUntil: 0
-  };
+  const f={el,x:pos.x,y:pos.y,angle,width:size,
+           speed:CONFIG.BASE_SPEED,
+           target:insideBox(w,h),
+           nextRetarget:performance.now()+rand(...CONFIG.RETARGET_SEC)*1000,
+           hp,alive:true,vanishAt:null,dashUntil:0};
   FISHES.push(f);
 
-  // タップ：HP減・揺れ・即加速・寿命タイマー開始・ダッシュ
-  el.addEventListener('pointerdown', (ev)=>{
+  el.addEventListener('pointerdown',(ev)=>{
     if(!f.alive) return;
-
-    // 水しぶき
-    const rect = stage.getBoundingClientRect();
-    makeSplash(ev.clientX - rect.left, ev.clientY - rect.top);
-
-    // ダメージ
-    f.hp -= 1;
-
-    // 揺れ（クラス再適用で連続可）
+    f.hp--;
+    const rect=stage.getBoundingClientRect();
+    makeSplash(ev.clientX-rect.left, ev.clientY-rect.top);
     el.classList.remove('shake'); void el.offsetWidth; el.classList.add('shake');
-
-    // 速度アップ（上限あり）
-    f.speed = Math.min(f.speed * CONFIG.SPEED_BOOST, CONFIG.BASE_SPEED * CONFIG.SPEED_MAX);
-
-    // 初回タップで寿命タイマー起動（かなり短い）
+    f.speed=Math.min(f.speed*CONFIG.SPEED_BOOST,CONFIG.BASE_SPEED*CONFIG.SPEED_MAX);
     if(!f.vanishAt){
-      f.vanishAt = performance.now() + rand(CONFIG.VANISH_TIME_RANGE[0], CONFIG.VANISH_TIME_RANGE[1]);
+      f.vanishAt=performance.now()+rand(...CONFIG.VANISH_TIME_RANGE);
     }
-
-    // タップ位置から離れる方向へダッシュ目標
-    const px = ev.clientX - rect.left, py = ev.clientY - rect.top;
-    const away = Math.atan2(f.y - py, f.x - px);
-    f.target = {
-      x: clamp(f.x + Math.cos(away)*CONFIG.DASH_DIST, CONFIG.EDGE_MARGIN, stage.clientWidth - CONFIG.EDGE_MARGIN),
-      y: clamp(f.y + Math.sin(away)*CONFIG.DASH_DIST, CONFIG.EDGE_MARGIN, stage.clientHeight - CONFIG.EDGE_MARGIN)
-    };
-    f.dashUntil = performance.now() + CONFIG.DASH_TIME;
-
-    // 規定回数タップで捕獲（シュッ演出でOK）
-    if(f.hp <= 0){
-      f.alive = false;
-      vanishFish(f, true);
+    const px=ev.clientX-rect.left, py=ev.clientY-rect.top;
+    const away=Math.atan2(f.y-py,f.x-px);
+    f.target={x:clamp(f.x+Math.cos(away)*CONFIG.DASH_DIST,CONFIG.EDGE_MARGIN,w-CONFIG.EDGE_MARGIN),
+              y:clamp(f.y+Math.sin(away)*CONFIG.DASH_DIST,CONFIG.EDGE_MARGIN,h-CONFIG.EDGE_MARGIN)};
+    f.dashUntil=performance.now()+CONFIG.DASH_TIME;
+    if(f.hp<=0){
+      f.alive=false;
+      vanishFish(f,true);
     }
-  }, {passive:true});
+  },{passive:true});
 }
 
-function vanishFish(f, caught=false){
+function vanishFish(f,caught=false){
   f.el.classList.add('vanish');
   setTimeout(()=>{
-    const idx = FISHES.indexOf(f);
-    if(idx !== -1) FISHES.splice(idx,1);
+    const idx=FISHES.indexOf(f);
+    if(idx!==-1)FISHES.splice(idx,1);
     f.el.remove();
-    spawnFish(); // 同数維持
-  }, 250);
+    spawnFish();
+  },250);
 }
 
-/* 進行ループ（境界で内向き、頻繁に進路変更） */
-let last = performance.now();
+let last=performance.now();
 function tick(now){
-  const dt = (now - last) / 1000; last = now;
-  const w = stage.clientWidth, h = stage.clientHeight;
-
+  const dt=(now-last)/1000; last=now;
+  const w=stage.clientWidth,h=stage.clientHeight;
   for(const f of FISHES){
     if(!f.alive) continue;
-
-    // 寿命到達：逃げ切り
-    if(f.vanishAt && now >= f.vanishAt){
-      f.alive = false;
-      vanishFish(f, false);
-      continue;
+    if(f.vanishAt && now>=f.vanishAt){
+      f.alive=false; vanishFish(f,false); continue;
     }
-
-    // 進路更新
-    if(now >= f.nextRetarget){
-      f.target = insideBox(w,h);
-      f.nextRetarget = now + rand(CONFIG.RETARGET_SEC[0], CONFIG.RETARGET_SEC[1]) * 1000;
+    if(now>=f.nextRetarget){
+      f.target=insideBox(w,h);
+      f.nextRetarget=now+rand(...CONFIG.RETARGET_SEC)*1000;
     }
-
-    // 欲しい角度へ最大旋回角で追従
-    const desired = Math.atan2(f.target.y - f.y, f.target.x - f.x) * 180/Math.PI;
-    const maxTurn = CONFIG.TURN_RATE * dt;
-    f.angle = stepAngle(f.angle, desired, maxTurn);
-
-    // 前進（dash中は速く見えるけど、速度はタップ加速が本体）
-    const rad = f.angle * DEG2RAD;
-    const vx = Math.cos(rad) * f.speed * dt;
-    const vy = Math.sin(rad) * f.speed * dt;
-
-    let nx = f.x + vx, ny = f.y + vy;
-
-    // 境界内へ押し戻し
-    let bumped = false;
-    const M = CONFIG.EDGE_MARGIN;
-    if(nx < M){ nx = M; bumped = true; }
-    if(nx > w - M){ nx = w - M; bumped = true; }
-    if(ny < M){ ny = M; bumped = true; }
-    if(ny > h - M){ ny = h - M; bumped = true; }
-
-    f.x = nx; f.y = ny;
-    if(bumped){
-      // 内側の安全目標に切り替え（壁で詰まらないように）
-      const cx = w/2, cy = h/2;
-      const dir = Math.atan2(cy - f.y, cx - f.x);
-      const dist = 140 + Math.random()*160;
-      f.target = {
-        x: clamp(f.x + Math.cos(dir)*dist, M, w - M),
-        y: clamp(f.y + Math.sin(dir)*dist, M, h - M)
-      };
-    }
-
-    // 目標に着いたら次へ
-    if(Math.hypot(f.target.x - f.x, f.target.y - f.y) < CONFIG.GOAL_RADIUS){
-      f.target = insideBox(w,h);
-      f.nextRetarget = now + rand(CONFIG.RETARGET_SEC[0], CONFIG.RETARGET_SEC[1]) * 1000;
-    }
-
-    // 表示更新
-    const visualRot = f.angle + 90;
-    f.el.style.setProperty('--rot0', `rotate(${visualRot}deg)`);
-    f.el.style.left = f.x + 'px';
-    f.el.style.top  = f.y + 'px';
-    f.el.style.transform = `rotate(${visualRot}deg)`;
+    const desired=Math.atan2(f.target.y-f.y,f.target.x-f.x)*180/Math.PI;
+    f.angle=stepAngle(f.angle,desired,CONFIG.TURN_RATE*dt);
+    const rad=f.angle*DEG2RAD;
+    f.x+=Math.cos(rad)*f.speed*dt;
+    f.y+=Math.sin(rad)*f.speed*dt;
+    f.x=clamp(f.x,CONFIG.EDGE_MARGIN,w-CONFIG.EDGE_MARGIN);
+    f.y=clamp(f.y,CONFIG.EDGE_MARGIN,h-CONFIG.EDGE_MARGIN);
+    const visualRot=f.angle+90;
+    f.el.style.setProperty('--rot0',`rotate(${visualRot}deg)`);
+    f.el.style.left=f.x+'px';
+    f.el.style.top=f.y+'px';
+    f.el.style.transform=`rotate(${visualRot}deg)`;
   }
-
   requestAnimationFrame(tick);
 }
 
-/* 初期化 */
 function init(){
   for(let i=0;i<CONFIG.FISH_MAX_COUNT;i++) spawnFish();
   requestAnimationFrame(tick);
 }
-addEventListener('load', init);
-addEventListener('resize', ()=>{
-  // リサイズ時もみんな画面内に
-  for(const f of FISHES){
-    f.x = clamp(f.x, CONFIG.EDGE_MARGIN, stage.clientWidth - CONFIG.EDGE_MARGIN);
-    f.y = clamp(f.y, CONFIG.EDGE_MARGIN, stage.clientHeight - CONFIG.EDGE_MARGIN);
-  }
-});
+addEventListener('load',init);
 </script>
 </body>
 </html>
