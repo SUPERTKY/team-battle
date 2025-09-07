@@ -1,0 +1,237 @@
+<!-- 保存名: turi.html  -->
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Turi – レイヤー合成</title>
+<style>
+  :root{
+    --stage-w: min(1280px, 92vw);
+    --stage-h: calc(var(--stage-w) * 9 / 16); /* 16:9 */
+    --water-opacity: 0.8;  /* 初期: 80%（不透明度） */
+    --fish-opacity: 0.6;   /* 初期: 60%（不透明度） */
+  }
+  *{ box-sizing: border-box; }
+  html,body{
+    height:100%; margin:0;
+    background:#0e1320; color:#e5eef7; font-family: system-ui, -apple-system, Segoe UI, Roboto, "Hiragino Kaku Gothic ProN", Meiryo, sans-serif;
+  }
+
+  .wrap{
+    min-height:100%;
+    display:grid;
+    place-items:center;
+    gap:18px;
+    padding:18px;
+  }
+
+  /* ステージ（キャンバス） */
+  .stage{
+    position:relative;
+    width: var(--stage-w);
+    height: var(--stage-h);
+    border-radius: 18px;
+    overflow:hidden;
+    box-shadow: 0 20px 50px rgba(0,0,0,.45);
+    background:#000; /* ロード前の下地 */
+    outline: 1px solid rgba(255,255,255,.08);
+  }
+  .layer{
+    position:absolute; inset:0;
+    display:block; width:100%; height:100%;
+    object-fit: cover; /* 画面いっぱいに敷き詰め */
+    image-rendering: auto;
+  }
+
+  /* レイヤー順序（z-index） */
+  /* 1段目: 砂（いちばん後ろ） */
+  #sand{ z-index: 1; }
+  /* 2段目: 魚影（中段） */
+  #fish{ z-index: 2; opacity: var(--fish-opacity); mix-blend-mode: multiply; }
+  /* 3段目: 海（水面・水中） */
+  #sea { z-index: 3; opacity: var(--water-opacity); }
+
+  /* コントロール */
+  .panel{
+    width: var(--stage-w);
+    max-width: 100%;
+    background: rgba(255,255,255,.06);
+    border: 1px solid rgba(255,255,255,.12);
+    border-radius: 16px;
+    padding: 14px;
+    display: grid;
+    gap: 10px;
+  }
+  .grid{
+    display:grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap:12px;
+  }
+  @media (max-width: 900px){
+    .grid{ grid-template-columns: 1fr; }
+  }
+  .card{
+    background: rgba(0,0,0,.25);
+    border: 1px solid rgba(255,255,255,.1);
+    border-radius: 12px;
+    padding: 10px 12px;
+    display:grid; gap:8px;
+  }
+  .card h3{
+    margin:0; font-size:14px; opacity:.9; font-weight:700;
+  }
+  .row{ display:flex; align-items:center; gap:10px; }
+  input[type="range"]{ width:100%; }
+  input[type="file"]{ width:100%; }
+  .hint{ font-size:12px; opacity:.8; }
+
+  .badge{
+    display:inline-block; padding:3px 8px; border-radius:999px;
+    border:1px solid rgba(255,255,255,.2);
+    background: rgba(255,255,255,.06);
+    font-size:11px; margin-left:6px;
+  }
+</style>
+</head>
+<body>
+  <main class="wrap">
+    <!-- レイヤー3枚を重ねるステージ -->
+    <section class="stage" id="stage" aria-label="合成ステージ">
+      <!-- 1段目（最背面）: 砂 -->
+      <img id="sand" class="layer" alt="砂レイヤー" src="" />
+      <!-- 2段目: 魚影（透過PNGなどを想定） -->
+      <img id="fish" class="layer" alt="魚影レイヤー" src="" />
+      <!-- 3段目: 海（水面/水中） -->
+      <img id="sea"  class="layer" alt="海レイヤー" src="" />
+    </section>
+
+    <!-- 操作パネル -->
+    <section class="panel">
+      <div class="grid">
+        <div class="card">
+          <h3>画像読み込み <span class="badge">ドラッグ&ドロップでもOK</span></h3>
+          <div class="row"><label style="width:5em">砂</label><input id="file-sand" type="file" accept="image/*"></div>
+          <div class="row"><label style="width:5em">魚影</label><input id="file-fish" type="file" accept="image/*"></div>
+          <div class="row"><label style="width:5em">海</label><input id="file-sea"  type="file" accept="image/*"></div>
+          <p class="hint">※ 砂は完全不透過の画像推奨。魚影は濃紺の半透明PNG、海は水面/水中のテクスチャなど。</p>
+        </div>
+
+        <div class="card">
+          <h3>不透明度</h3>
+          <div class="row">
+            <label style="width:5em">魚影</label>
+            <input id="opacity-fish" type="range" min="0" max="100" value="60">
+            <output id="out-fish">60%</output>
+          </div>
+          <div class="row">
+            <label style="width:5em">海</label>
+            <input id="opacity-sea" type="range" min="0" max="100" value="80">
+            <output id="out-sea">80%</output>
+          </div>
+          <p class="hint">「一番後ろ=砂」「三段目=海」。魚影は中段です。値はいつでも調整できます。</p>
+        </div>
+
+        <div class="card">
+          <h3>表示調整</h3>
+          <div class="row">
+            <label style="width:8em">ステージ比率</label>
+            <select id="ratio">
+              <option value="16/9" selected>16:9</option>
+              <option value="4/3">4:3</option>
+              <option value="1/1">1:1</option>
+              <option value="21/9">21:9</option>
+            </select>
+          </div>
+          <div class="row">
+            <label style="width:8em">サイズ</label>
+            <input id="width" type="range" min="480" max="1600" value="1280">
+            <output id="out-w">1280px</output>
+          </div>
+          <p class="hint">ステージはCSSだけで拡縮します（画像は自動でフィット）。</p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+<script>
+  // 要素参照
+  const sandImg = document.getElementById('sand');
+  const fishImg = document.getElementById('fish');
+  const seaImg  = document.getElementById('sea');
+
+  // ファイル入力
+  const fileSand = document.getElementById('file-sand');
+  const fileFish = document.getElementById('file-fish');
+  const fileSea  = document.getElementById('file-sea');
+
+  // スライダー
+  const rangeFish = document.getElementById('opacity-fish');
+  const outFish   = document.getElementById('out-fish');
+  const rangeSea  = document.getElementById('opacity-sea');
+  const outSea    = document.getElementById('out-sea');
+
+  // 表示調整
+  const stage = document.getElementById('stage');
+  const ratioSel = document.getElementById('ratio');
+  const widthRange = document.getElementById('width');
+  const outW = document.getElementById('out-w');
+
+  // 画像読み込み（File -> img.src）
+  function handleFile(input, img){
+    const file = input.files?.[0];
+    if(!file) return;
+    const reader = new FileReader();
+    reader.onload = e => img.src = e.target.result;
+    reader.readAsDataURL(file);
+  }
+  fileSand.addEventListener('change', () => handleFile(fileSand, sandImg));
+  fileFish.addEventListener('change', () => handleFile(fileFish, fishImg));
+  fileSea .addEventListener('change', () => handleFile(fileSea,  seaImg));
+
+  // D&D でも入れ替え可能
+  ;['dragenter','dragover','dragleave','drop'].forEach(ev=>{
+    stage.addEventListener(ev, e=>{ e.preventDefault(); e.stopPropagation(); }, false);
+  });
+  stage.addEventListener('drop', e=>{
+    const files = [...(e.dataTransfer?.files||[])].filter(f=>f.type.startsWith('image/'));
+    if(!files.length) return;
+    // 砂, 魚, 海 の順で埋める
+    const order = [sandImg, fishImg, seaImg];
+    let idx = 0;
+    for(const f of files){
+      const r = new FileReader();
+      r.onload = ev => order[idx++]?.setAttribute('src', ev.target.result);
+      r.readAsDataURL(f);
+      if(idx >= order.length) break;
+    }
+  });
+
+  // 不透明度の制御
+  function setOpacity(){
+    const f = +rangeFish.value / 100;
+    const s = +rangeSea.value  / 100;
+    document.documentElement.style.setProperty('--fish-opacity', f);
+    document.documentElement.style.setProperty('--water-opacity', s);
+    outFish.textContent = `${rangeFish.value}%`;
+    outSea.textContent  = `${rangeSea.value}%`;
+  }
+  rangeFish.addEventListener('input', setOpacity);
+  rangeSea .addEventListener('input', setOpacity);
+  setOpacity();
+
+  // ステージ比率と幅
+  function applySize(){
+    const w = +widthRange.value;
+    document.documentElement.style.setProperty('--stage-w', w + 'px');
+    outW.textContent = w + 'px';
+    const ratio = ratioSel.value; // e.g. "16/9"
+    stage.style.aspectRatio = ratio;
+    document.documentElement.style.setProperty('--stage-h', `calc(var(--stage-w) * ${ratio})`);
+  }
+  widthRange.addEventListener('input', applySize);
+  ratioSel.addEventListener('change', applySize);
+  applySize();
+</script>
+</body>
+</html>
