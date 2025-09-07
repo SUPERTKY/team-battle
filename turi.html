@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>TURI – 魚ランダム移動</title>
+<title>TURI – 魚ランダム移動（場外禁止・永続）</title>
 <style>
   :root{
     --stage-w: min(1280px, 94vw);
@@ -84,7 +84,7 @@ const maxFish = parseInt(getComputedStyle(document.documentElement).getPropertyV
 
 const fishImgSrc = "assets/fish.png";
 
-/** 魚を生成して動かす */
+/** 魚を生成して永続的に動かす */
 function spawnFish(){
   if(fishLayer.children.length >= maxFish) return;
 
@@ -92,66 +92,67 @@ function spawnFish(){
   fish.src = fishImgSrc;
   fish.className = "fish";
 
-  // 初期位置：左右どちらかの外
-  const fromLeft = Math.random() < 0.5;
-  const startY = Math.random() * 80 + 10; // 上から10〜90%
-  fish.style.top = startY + "%";
-  fish.style.left = fromLeft ? "-10%" : "110%";
-
-  // 向き調整：画像の上が頭なので、進行方向に回転
-  const angle = fromLeft ? 90 : -90; // 左→右なら右向き、右→左なら左向き
-  fish.style.transform = `rotate(${angle}deg)`;
-
-  fishLayer.appendChild(fish);
-
-  moveFish(fish, fromLeft);
-}
-
-/** 魚をランダムに動かす */
-function moveFish(fish, fromLeft){
   const stageW = stage.clientWidth;
   const stageH = stage.clientHeight;
 
-  // ゴール位置（画面外）
-  const targetX = fromLeft ? stageW + 100 : -100;
-  const targetY = Math.random() * (stageH*0.6) + stageH*0.2; // 下寄りに泳ぐ
+  // 初期位置（画面内ランダム）
+  const x = Math.random() * (stageW - 100) + 50;
+  const y = Math.random() * (stageH - 100) + 50;
 
-  // 移動時間（スピード）
-  const duration = 8000 + Math.random()*4000; // 8〜12秒
+  fish.style.left = x + "px";
+  fish.style.top = y + "px";
+  fishLayer.appendChild(fish);
 
+  // 永続的に移動開始
+  moveFishLoop(fish);
+}
+
+/** 魚を永続的にランダム移動させるループ */
+function moveFishLoop(fish){
+  const stageW = stage.clientWidth;
+  const stageH = stage.clientHeight;
+
+  // 新しい目標地点（画面内）
+  const targetX = Math.random() * (stageW - 100) + 50;
+  const targetY = Math.random() * (stageH - 100) + 50;
+
+  const startX = parseFloat(fish.style.left);
+  const startY = parseFloat(fish.style.top);
+
+  // 移動時間
+  const duration = 4000 + Math.random()*4000; // 4〜8秒
   const start = performance.now();
 
   function animate(now){
     const t = Math.min((now - start) / duration, 1);
-    // イージング：ゆったり
     const ease = t<0.5 ? 2*t*t : -1+(4-2*t)*t;
 
-    const startX = fromLeft ? -100 : stageW+100;
-    const startY = parseFloat(fish.style.top)/100*stageH;
-
     const x = startX + (targetX - startX) * ease;
-    const y = startY + (targetY - startY) * ease + Math.sin(t*6*Math.PI)*20; // 上下ゆらぎ
+    const y = startY + (targetY - startY) * ease + Math.sin(t*4*Math.PI)*10;
 
     fish.style.left = x + "px";
     fish.style.top = y + "px";
 
-    // 進行方向に合わせて少し角度調整
-    const dx = (targetX - startX);
-    const dy = (targetY - startY);
+    // 進行方向に合わせて角度を調整
+    const dx = targetX - startX;
+    const dy = targetY - startY;
     const dir = Math.atan2(dy, dx) * 180/Math.PI;
     fish.style.transform = `rotate(${dir}deg)`;
 
-    if(t<1){
+    if(t < 1){
       requestAnimationFrame(animate);
     }else{
-      fish.remove();
+      // 次の移動先を設定
+      moveFishLoop(fish);
     }
   }
   requestAnimationFrame(animate);
 }
 
-// 定期的に魚を出す
-setInterval(spawnFish, 3000); // 3秒おきに挑戦
+// 初期魚を出す
+for(let i=0;i<maxFish;i++){
+  spawnFish();
+}
 </script>
 </body>
 </html>
