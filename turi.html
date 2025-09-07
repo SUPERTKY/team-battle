@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>TURI – 改良版カースティクス</title>
+<title>TURI – 柔らかいカースティクス</title>
 <style>
   :root{
     --stage-w: min(1280px, 94vw);
@@ -12,21 +12,19 @@
     --water-opacity: .80;     /* 水層の不透明度 */
     --tint-color: #19b5c1;    /* 水色のティント */
     --tint-alpha: .22;        /* ティント濃度 */
-    --caustics-alpha: .28;    /* 光の筋の濃度 */
-    --wobble-scale: 8;        /* 水の歪み強さ */
-    --wobble-speed: 12s;      /* 歪みの速さ */
+    --caustics-alpha: .25;    /* 光の筋の濃度 */
   }
 
   *{ box-sizing: border-box }
   html,body{
     height:100%; margin:0;
-    background:#05121a; color:#e7f7ff;
-    font-family: system-ui,-apple-system,Segoe UI,Roboto, "Hiragino Kaku Gothic ProN", Meiryo, sans-serif;
+    background:#05121a;
+    font-family: system-ui, sans-serif;
   }
   .wrap{
     min-height:100%;
     display:grid; place-items:center;
-    padding:16px; gap:14px;
+    padding:16px;
   }
 
   .stage{
@@ -51,7 +49,7 @@
   #waterBase{ z-index: 2; opacity: var(--water-opacity); }
   .tint{ z-index: 3; mix-blend-mode: multiply; background: color-mix(in srgb, var(--tint-color) calc(var(--tint-alpha)*100%), transparent); }
   .caustics{ z-index: 4; opacity: var(--caustics-alpha); mix-blend-mode: screen; background:#000; }
-  #fish{ display:none; } /* 今は使わない */
+  #fish{ display:none; }
 </style>
 </head>
 <body>
@@ -62,34 +60,37 @@
       <!-- 水のベース -->
       <img id="waterBase" class="layer" src="assets/water_background_80percent.png" alt="水">
       <!-- ティント -->
-      <div class="layer tint" aria-hidden="true"></div>
-      <!-- 改良版カースティクス -->
-      <div class="layer caustics" aria-hidden="true"></div>
+      <div class="layer tint"></div>
+      <!-- 柔らかいカースティクス -->
+      <div class="layer caustics"></div>
       <!-- 魚はまだ非表示 -->
       <img id="fish" class="layer" src="assets/fish.png" alt="魚影">
     </section>
   </main>
 
-  <!-- SVGフィルタ：自然な水の光模様 -->
+  <!-- SVGフィルタ：柔らかい水の光模様 -->
   <svg width="0" height="0">
     <filter id="causticsFilter">
-      <!-- ノイズ生成 -->
-      <feTurbulence type="fractalNoise" baseFrequency="0.02 0.08" numOctaves="3" seed="4" result="noise">
-        <animate attributeName="seed" from="0" to="999" dur="20s" repeatCount="indefinite"/>
+      <!-- 大きくて柔らかいノイズ -->
+      <feTurbulence type="fractalNoise" baseFrequency="0.005 0.02"
+        numOctaves="2" seed="5" result="noise">
+        <!-- 横方向にゆっくり流す -->
+        <animateTransform attributeName="patternTransform"
+          type="translate" from="0 0" to="200 0"
+          dur="30s" repeatCount="indefinite"/>
       </feTurbulence>
-      <!-- コントラスト強調して光筋っぽく -->
+      <!-- コントラスト強調を弱めに -->
       <feColorMatrix type="matrix" values="
         1 0 0 0 0
         0 1 0 0 0
         0 0 1 0 0
-        0 0 0 25 -5" result="contrast"/>
-      <!-- 少しぼかす -->
-      <feGaussianBlur stdDeviation="0.5" />
+        0 0 0 6 -3" result="contrast"/>
+      <!-- 柔らかくぼかす -->
+      <feGaussianBlur stdDeviation="1.2"/>
     </filter>
   </svg>
 
   <style>
-    /* フィルタを適用 */
     .caustics{ filter:url(#causticsFilter); }
   </style>
 </body>
