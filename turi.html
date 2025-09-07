@@ -3,41 +3,144 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>釣りゲーム</title>
+<title>TURI – 海の見た目を静止画からブースト</title>
 <style>
-  html,body{
-    margin:0; padding:0;
-    height:100%; width:100%;
-    overflow:hidden;
-    background:#000;
+  /* 調整しやすい変数 */
+  :root{
+    --stage-w: min(1280px, 94vw);
+    --ratio: 16/9;
+
+    --water-opacity: .80;     /* 水層の不透明度 */
+    --tint-color: #19b5c1;    /* 水色のティント */
+    --tint-alpha: .22;        /* ティント濃度 */
+    --caustics-alpha: .27;    /* 光の筋（カースティクス）の濃度 */
+    --wobble-scale: 8;        /* 水の歪み強さ 0-20くらい */
+    --wobble-speed: 12s;      /* 歪みの速さ */
+    --sparkle-alpha: .12;     /* 粒子の濃度 */
   }
+
+  *{ box-sizing: border-box }
+  html,body{
+    height:100%; margin:0;
+    background:#05121a; color:#e7f7ff;
+    font-family: system-ui,-apple-system,Segoe UI,Roboto, "Hiragino Kaku Gothic ProN", Meiryo, sans-serif;
+  }
+  .wrap{
+    min-height:100%;
+    display:grid; place-items:center;
+    padding:16px; gap:14px;
+  }
+
+  /* ステージ（レイヤーを重ねるキャンバス） */
   .stage{
     position:relative;
-    width:100%;
-    height:100vh;
+    width: var(--stage-w);
+    aspect-ratio: var(--ratio);
     overflow:hidden;
+    border-radius: 18px;
+    outline: 1px solid rgba(255,255,255,.08);
+    box-shadow: 0 18px 48px rgba(0,0,0,.45), inset 0 0 0 1px rgba(255,255,255,.04);
+    background:#000;
   }
   .layer{
-    position:absolute;
-    top:0; left:0;
+    position:absolute; inset:0;
     width:100%; height:100%;
-    object-fit:cover;
+    object-fit: cover;
     display:block;
+    pointer-events:none;
   }
-  /* レイヤーの順序 */
-  #sand { z-index: 1; }   /* 一番後ろ */
-  #fish { z-index: 2; }   /* 中段 */
-  #sea  { z-index: 3; }   /* 一番前（海水面） */
+
+  /* レイヤー順（背面→前面）*/
+  #sand{ z-index: 1; }         /* 砂：完全不透過 */
+  #waterBase{ z-index: 2; opacity: var(--water-opacity); } /* 水の元画像（真上の水面っぽい） */
+  .waterFX{ z-index: 3; }      /* ここに水のゆらぎ・光筋・粒子を重ねる */
+  #fish{ display:none; }       /* 魚は読み込むが今は未使用 */
+
+  /* === 水の見た目ブースト（静止画でも海に見せる） =================== */
+
+  /* 1) ティント（青み） */
+  .tint{
+    background: color-mix(in srgb, var(--tint-color) var(--tint-alpha*100), transparent);
+    mix-blend-mode: multiply;
+  }
+
+  /* 2) カースティクス（水面の光模様）: CSSグラデの2枚をゆっくり流す */
+  .caustics{
+    opacity: var(--caustics-alpha);
+    mix-blend-mode: screen;
+    background:
+      radial-gradient(120% 120% at 20% 10%, rgba(255,255,255,.9) 3%, transparent 18%) 0 0/270px 270px,
+      radial-gradient(120% 120% at 80% 15%, rgba(255,255,255,.7) 2%, transparent 16%) 0 0/240px 240px;
+    animation: drift1 18s linear infinite, drift2 28s linear infinite reverse;
+  }
+  @keyframes drift1{
+    from{ background-position: 0px 0px, 0px 0px; }
+    to  { background-position: 800px 500px, 0px 0px; }
+  }
+  @keyframes drift2{
+    from{ background-position: 0px 0px, 0px 0px; }
+    to  { background-position: 0px 0px, -700px 450px; }
+  }
+
+  /* 3) 微小粒子（浮遊物） */
+  .sparkle{
+    opacity: var(--sparkle-alpha);
+    background-image:
+      radial-gradient(2px 2px at 20% 30%, #fff, transparent 60%),
+      radial-gradient(1.5px 1.5px at 70% 60%, #fff, transparent 60%),
+      radial-gradient(1.2px 1.2px at 45% 80%, #fff, transparent 60%),
+      radial-gradient(1.2px 1.2px at 88% 40%, #fff, transparent 60%);
+    background-size: 100% 100%;
+    animation: floaty 22s ease-in-out infinite alternate;
+    mix-blend-mode: screen;
+  }
+  @keyframes floaty{
+    from{ transform: translateY(0) }
+    to  { transform: translateY(-8px) }
+  }
+
+  /* 4) 水の歪み（SVGフィルタ） */
+  .wobble{
+    filter: url(#waterWobble);
+  }
+
+  /* 安全策：低電力や簡易描画モードの端末ではアニメ軽減 */
+  @media (prefers-reduced-motion: reduce){
+    .caustics, .sparkle { animation: none !important; }
+    .wobble { filter: none !important; }
+  }
+
+  .credit{ font-size:12px; opacity:.7 }
 </style>
 </head>
 <body>
-  <div class="stage">
-    <!-- 1段目: 砂 -->
-    <img id="sand" class="layer" src="assets/sand.png" alt="砂">
-    <!-- 2段目: 魚影 -->
-    <img id="fish" class="layer" src="assets/fish.png" alt="魚影">
-    <!-- 3段目: 海 -->
-    <img id="sea"  class="layer" src="assets/water_background_80percent.png" alt="海">
-  </div>
+  <main class="wrap">
+    <section class="stage">
+      <!-- 背面：砂 -->
+      <img id="sand" class="layer" src="assets/sand.png" alt="砂">
+
+      <!-- 中段：水のベース（真上の水面の静止画） -->
+      <img id="waterBase" class="layer wobble" src="assets/water_background_80percent.png" alt="水">
+
+      <!-- 前面：水表現のエフェクト群（静止画の上に重ねるだけ） -->
+      <div class="layer waterFX tint wobble" aria-hidden="true"></div>
+      <div class="layer waterFX caustics wobble" aria-hidden="true"></div>
+      <div class="layer waterFX sparkle" aria-hidden="true"></div>
+
+      <!-- 魚は読み込むだけ（今は非表示） -->
+      <img id="fish" class="layer" src="assets/fish.png" alt="魚影（未使用）">
+    </section>
+    <div class="credit">※ 静止画ベースでも、水ゆらぎ・光模様・粒子で“海感”を強化しています。</div>
+  </main>
+
+  <!-- SVGフィルタ：水の屈折っぽい“ゆらぎ” -->
+  <svg width="0" height="0" style="position:absolute">
+    <filter id="waterWobble">
+      <feTurbulence type="fractalNoise" baseFrequency=".006 .01" numOctaves="2" seed="3" result="noise">
+        <animate attributeName="seed" from="0" to="999" dur="var(--wobble-speed)" repeatCount="indefinite"/>
+      </feTurbulence>
+      <feDisplacementMap in="SourceGraphic" in2="noise" scale="var(--wobble-scale)" xChannelSelector="R" yChannelSelector="G"/>
+    </filter>
+  </svg>
 </body>
 </html>
