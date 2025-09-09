@@ -179,6 +179,9 @@ const stage = document.getElementById('stage');
 const fishLayer = document.getElementById('fishLayer');
 const fishImgSrc = 'assets/fish.png';
 const FISHES = [];
+// spawnFish 内の f を作る直前あたり
+const t = (size - CONFIG.FISH_MIN_SIZE) / (CONFIG.FISH_MAX_SIZE - CONFIG.FISH_MIN_SIZE);
+const initSpeed = CONFIG.BASE_SPEED * (1 + t); // t=0 →1倍, t=1 →2倍
 
 const DEG2RAD = Math.PI/180;
 const clamp=(v,min,max)=>Math.max(min,Math.min(max,v));
@@ -225,11 +228,12 @@ function spawnFish(){
   el.style.setProperty('--rot0',`rotate(${angle+90}deg)`);
   el.style.transform=`rotate(${angle+90}deg)`;
 
-  const f={el,x:pos.x,y:pos.y,angle,width:size,
-           speed:CONFIG.BASE_SPEED,
-           target:insideBox(w,h),
-           nextRetarget:performance.now()+rand(...CONFIG.RETARGET_SEC)*1000,
-           hp,alive:true,vanishAt:null,dashUntil:0};
+const f={el,x:pos.x,y:pos.y,angle,width:size,
+         speed:initSpeed,
+         target:insideBox(w,h),
+         nextRetarget:performance.now()+rand(...CONFIG.RETARGET_SEC)*1000,
+         hp,alive:true,vanishAt:null,dashUntil:0};
+
   FISHES.push(f);
 
 el.addEventListener('pointerdown',(ev)=>{
@@ -242,7 +246,9 @@ el.addEventListener('pointerdown',(ev)=>{
   el.classList.remove('shake');
   requestAnimationFrame(()=> el.classList.add('shake'));
 
-  f.speed=Math.min(f.speed*CONFIG.SPEED_BOOST,CONFIG.BASE_SPEED*CONFIG.SPEED_MAX);
+  f.speed = Math.min(f.speed * CONFIG.SPEED_BOOST,
+                   CONFIG.BASE_SPEED * CONFIG.SPEED_MAX);
+
   if(!f.vanishAt){
     f.vanishAt=performance.now()+rand(...CONFIG.VANISH_TIME_RANGE);
   }
@@ -315,6 +321,7 @@ addEventListener('load',init);
 </script>
 </body>
 </html>
+
 
 
 
