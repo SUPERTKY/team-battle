@@ -174,26 +174,33 @@ function spawnFish(){
            hp,alive:true,vanishAt:null,dashUntil:0};
   FISHES.push(f);
 
-  el.addEventListener('pointerdown',(ev)=>{
-    if(!f.alive) return;
-    f.hp--;
-    const rect=stage.getBoundingClientRect();
-    makeSplash(ev.clientX-rect.left, ev.clientY-rect.top);
-    el.classList.remove('shake'); void el.offsetWidth; el.classList.add('shake');
-    f.speed=Math.min(f.speed*CONFIG.SPEED_BOOST,CONFIG.BASE_SPEED*CONFIG.SPEED_MAX);
-    if(!f.vanishAt){
-      f.vanishAt=performance.now()+rand(...CONFIG.VANISH_TIME_RANGE);
-    }
-    const px=ev.clientX-rect.left, py=ev.clientY-rect.top;
-    const away=Math.atan2(f.y-py,f.x-px);
-    f.target={x:clamp(f.x+Math.cos(away)*CONFIG.DASH_DIST,CONFIG.EDGE_MARGIN,w-CONFIG.EDGE_MARGIN),
-              y:clamp(f.y+Math.sin(away)*CONFIG.DASH_DIST,CONFIG.EDGE_MARGIN,h-CONFIG.EDGE_MARGIN)};
-    f.dashUntil=performance.now()+CONFIG.DASH_TIME;
-    if(f.hp<=0){
-      f.alive=false;
-      vanishFish(f,true);
-    }
-  },{passive:true});
+el.addEventListener('pointerdown',(ev)=>{
+  if(!f.alive) return;
+  f.hp--;
+  const rect=stage.getBoundingClientRect();
+  makeSplash(ev.clientX-rect.left, ev.clientY-rect.top);
+
+  // ★ 修正部分
+  el.classList.remove('shake');
+  requestAnimationFrame(()=> el.classList.add('shake'));
+
+  f.speed=Math.min(f.speed*CONFIG.SPEED_BOOST,CONFIG.BASE_SPEED*CONFIG.SPEED_MAX);
+  if(!f.vanishAt){
+    f.vanishAt=performance.now()+rand(...CONFIG.VANISH_TIME_RANGE);
+  }
+  const px=ev.clientX-rect.left, py=ev.clientY-rect.top;
+  const away=Math.atan2(f.y-py,f.x-px);
+  f.target={
+    x:clamp(f.x+Math.cos(away)*CONFIG.DASH_DIST,CONFIG.EDGE_MARGIN,w-CONFIG.EDGE_MARGIN),
+    y:clamp(f.y+Math.sin(away)*CONFIG.DASH_DIST,CONFIG.EDGE_MARGIN,h-CONFIG.EDGE_MARGIN)
+  };
+  f.dashUntil=performance.now()+CONFIG.DASH_TIME;
+  if(f.hp<=0){
+    f.alive=false;
+    vanishFish(f,true);
+  }
+},{passive:true});
+
 }
 
 function vanishFish(f,caught=false){
@@ -243,6 +250,7 @@ addEventListener('load',init);
 </script>
 </body>
 </html>
+
 
 
 
