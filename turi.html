@@ -161,6 +161,20 @@ function rollRank(sizePx){
   if(r < pLegendary+pEpic+pRare+pUncommon) return "UNCOMMON";
   return "COMMON";
 }
+// 角度補間（短い回転）
+function lerpAngle(a, b, t){
+  const diff = ((b - a + 540) % 360) - 180;
+  return a + diff * t;
+}
+
+// 端への接近度（予測回避で使用：既に入れてなければ追加）
+function edgeProximity(x, y, w, h, margin = CONFIG.EDGE_MARGIN) {
+  const dx = Math.min(x - margin, (w - margin) - x);
+  const dy = Math.min(y - margin, (h - margin) - y);
+  const nx = clamp(1 - (dx / margin), 0, 1);
+  const ny = clamp(1 - (dy / margin), 0, 1);
+  return Math.max(nx, ny);
+}
 
 function pickSpecies(rank){
   const arr = CATCH.speciesByRank[rank] || ["???"];
@@ -251,13 +265,26 @@ function spawnFish(){
   el.style.setProperty('--rot0',`rotate(${angle+90}deg)`);
   el.style.transform = `rotate(${angle+90}deg)`;
 
-  const f = {
-    el, x:pos.x, y:pos.y, angle, width:size,
-    speed: initSpeed,                        // ★ここがサイズ連動の初期速度
-    target: insideBox(w,h),
-    nextRetarget: performance.now() + rand(...CONFIG.RETARGET_SEC)*1000,
-    hp, alive:true, vanishAt:null, dashUntil:0
-  };
+const f = {
+  el,x:pos.x,y:pos.y,angle,width:size,
+  speed: initSpeed,
+  target: insideBox(w,h),
+  nextRetarget: performance.now()+rand(...CONFIG.RETARGET_SEC)*1000,
+  hp,alive:true,vanishAt:null,dashUntil:0,
+
+  // ★ 追加：曲率ノイズ（常時うねり）
+  curvePhase: rand(0, Math.PI*2),
+  curveSpeed: rand(0.8, 1.6),     // うねりの速さ
+  curveMag:   rand(6, 22),        // 角度うねりの振幅[deg]
+
+  // ★ 追加：一時的な円運動（旋回）
+  orbitUntil: 0,
+  orbitCenter: null,
+  orbitRadius: 0,
+  orbitDir: (Math.random()<0.5? -1: 1),
+  orbitAng: 0
+};
+
   FISHES.push(f);
 
   el.addEventListener('pointerdown',(ev)=>{
@@ -289,6 +316,19 @@ function spawnFish(){
       vanishFish(f,true);
     }
   },{passive:true});
+  function startOrbit(f, w, h, now){
+  // 画面内で安全に回れる中心と半径を決定
+  const r = rand(80, 220);
+  const cx = clamp(f.x, CONFIG.EDGE_MARGIN + r, w - CONFIG.EDGE_MARGIN - r);
+  const cy = clamp(f.y, CONFIG.EDGE_MARGIN + r, h - CONFIG.EDGE_MARGIN - r);
+
+  f.orbitCenter = {x: cx, y: cy};
+  f.orbitRadius = r;
+  f.orbitAng    = Math.atan2(f.y - cy, f.x - cx) * 180/Math.PI;
+  f.orbitDir    = (Math.random()<0.5? -1: 1);
+  f.orbitUntil  = now + rand(900, 1800); // 0.9〜1.8秒だけ旋回
+}
+
 }
 
 function vanishFish(f,caught=false){
@@ -355,6 +395,7 @@ addEventListener('load',init);
 </script>
 </body>
 </html>
+
 
 
 
