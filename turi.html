@@ -205,66 +205,77 @@ function makeSplash(x,y){
   sp.addEventListener('animationend',()=>sp.remove());
 }
 
-/* spawn */
 function spawnFish(){
   if(FISHES.length>=CONFIG.FISH_MAX_COUNT) return;
+
   const el=document.createElement('img');
   el.src=fishImgSrc;
   el.className='fish';
-  el.draggable=false; // ★画像ドラッグ禁止
-  const w=stage.clientWidth,h=stage.clientHeight;
+  el.draggable=false;
+
+  const w=stage.clientWidth, h=stage.clientHeight;
   const pos=insideBox(w,h);
-  const size=rand(CONFIG.FISH_MIN_SIZE,CONFIG.FISH_MAX_SIZE);
-  el.style.width=size+'px';
-  el.style.left=pos.x+'px';
-  el.style.top=pos.y+'px';
+
+  // ここで size を作る（この関数のローカル変数）
+  const size = rand(CONFIG.FISH_MIN_SIZE, CONFIG.FISH_MAX_SIZE);
+
+  // ★サイズ→速度：最小サイズ=BASE_SPEED、最大サイズ=BASE_SPEED*2
+  const t = (size - CONFIG.FISH_MIN_SIZE) / (CONFIG.FISH_MAX_SIZE - CONFIG.FISH_MIN_SIZE);
+  const initSpeed = CONFIG.BASE_SPEED * (1 + clamp(t,0,1)); // 1～2倍
+
+  el.style.width = size + 'px';
+  el.style.left  = pos.x + 'px';
+  el.style.top   = pos.y + 'px';
   fishLayer.appendChild(el);
 
-  const hp=Math.round(lerp(CONFIG.HP_MIN,CONFIG.HP_MAX,
-              (size-CONFIG.FISH_MIN_SIZE)/(CONFIG.FISH_MAX_SIZE-CONFIG.FISH_MIN_SIZE)));
+  const hp = Math.round(lerp(
+    CONFIG.HP_MIN, CONFIG.HP_MAX,
+    (size - CONFIG.FISH_MIN_SIZE) / (CONFIG.FISH_MAX_SIZE - CONFIG.FISH_MIN_SIZE)
+  ));
 
   const cx=w/2, cy=h/2;
-  let angle=Math.atan2(cy-pos.y,cx-pos.x)*180/Math.PI+rand(-35,35);
+  let angle = Math.atan2(cy-pos.y, cx-pos.x)*180/Math.PI + rand(-35,35);
   el.style.setProperty('--rot0',`rotate(${angle+90}deg)`);
-  el.style.transform=`rotate(${angle+90}deg)`;
+  el.style.transform = `rotate(${angle+90}deg)`;
 
-const f={el,x:pos.x,y:pos.y,angle,width:size,
-         speed:initSpeed,
-         target:insideBox(w,h),
-         nextRetarget:performance.now()+rand(...CONFIG.RETARGET_SEC)*1000,
-         hp,alive:true,vanishAt:null,dashUntil:0};
-
+  const f = {
+    el, x:pos.x, y:pos.y, angle, width:size,
+    speed: initSpeed,                        // ★ここがサイズ連動の初期速度
+    target: insideBox(w,h),
+    nextRetarget: performance.now() + rand(...CONFIG.RETARGET_SEC)*1000,
+    hp, alive:true, vanishAt:null, dashUntil:0
+  };
   FISHES.push(f);
 
-el.addEventListener('pointerdown',(ev)=>{
-  if(!f.alive) return;
-  f.hp--;
-  const rect=stage.getBoundingClientRect();
-  makeSplash(ev.clientX-rect.left, ev.clientY-rect.top);
+  el.addEventListener('pointerdown',(ev)=>{
+    if(!f.alive) return;
+    f.hp--;
+    const rect=stage.getBoundingClientRect();
+    makeSplash(ev.clientX-rect.left, ev.clientY-rect.top);
 
-  // ★ 修正部分
-  el.classList.remove('shake');
-  requestAnimationFrame(()=> el.classList.add('shake'));
+    el.classList.remove('shake');
+    requestAnimationFrame(()=> el.classList.add('shake'));
 
-  f.speed = Math.min(f.speed * CONFIG.SPEED_BOOST,
-                   CONFIG.BASE_SPEED * CONFIG.SPEED_MAX);
+    f.speed = Math.min(f.speed * CONFIG.SPEED_BOOST,
+                       CONFIG.BASE_SPEED * CONFIG.SPEED_MAX);
 
-  if(!f.vanishAt){
-    f.vanishAt=performance.now()+rand(...CONFIG.VANISH_TIME_RANGE);
-  }
-  const px=ev.clientX-rect.left, py=ev.clientY-rect.top;
-  const away=Math.atan2(f.y-py,f.x-px);
-  f.target={
-    x:clamp(f.x+Math.cos(away)*CONFIG.DASH_DIST,CONFIG.EDGE_MARGIN,w-CONFIG.EDGE_MARGIN),
-    y:clamp(f.y+Math.sin(away)*CONFIG.DASH_DIST,CONFIG.EDGE_MARGIN,h-CONFIG.EDGE_MARGIN)
-  };
-  f.dashUntil=performance.now()+CONFIG.DASH_TIME;
-  if(f.hp<=0){
-    f.alive=false;
-    vanishFish(f,true);
-  }
-},{passive:true});
+    if(!f.vanishAt){
+      f.vanishAt = performance.now() + rand(...CONFIG.VANISH_TIME_RANGE);
+    }
 
+    const px=ev.clientX-rect.left, py=ev.clientY-rect.top;
+    const away=Math.atan2(f.y-py,f.x-px);
+    f.target = {
+      x:clamp(f.x+Math.cos(away)*CONFIG.DASH_DIST,CONFIG.EDGE_MARGIN,w-CONFIG.EDGE_MARGIN),
+      y:clamp(f.y+Math.sin(away)*CONFIG.DASH_DIST,CONFIG.EDGE_MARGIN,h-CONFIG.EDGE_MARGIN)
+    };
+    f.dashUntil = performance.now()+CONFIG.DASH_TIME;
+
+    if(f.hp<=0){
+      f.alive=false;
+      vanishFish(f,true);
+    }
+  },{passive:true});
 }
 
 function vanishFish(f,caught=false){
@@ -321,6 +332,7 @@ addEventListener('load',init);
 </script>
 </body>
 </html>
+
 
 
 
