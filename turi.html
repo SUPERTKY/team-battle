@@ -180,8 +180,7 @@ const fishLayer = document.getElementById('fishLayer');
 const fishImgSrc = 'assets/fish.png';
 const FISHES = [];
 // spawnFish 内の f を作る直前あたり
-const t = (size - CONFIG.FISH_MIN_SIZE) / (CONFIG.FISH_MAX_SIZE - CONFIG.FISH_MIN_SIZE);
-const initSpeed = CONFIG.BASE_SPEED * (1 + t); // t=0 →1倍, t=1 →2倍
+
 
 const DEG2RAD = Math.PI/180;
 const clamp=(v,min,max)=>Math.max(min,Math.min(max,v));
@@ -332,6 +331,7 @@ addEventListener('load',init);
 </script>
 </body>
 </html>
+
 
 
 
