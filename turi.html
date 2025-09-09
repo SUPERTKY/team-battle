@@ -116,6 +116,64 @@ const CONFIG = {
   DASH_DIST: 240,
   DASH_TIME: 240
 };
+  // ===== Catch Roll (sizeが大きいほど上位が出やすい) =====
+const CATCH = {
+  ranks: ["COMMON","UNCOMMON","RARE","EPIC","LEGENDARY"],
+  // 各ランクで出るデフォルトの魚名（適当でOK／後で差し替え可）
+  speciesByRank: {
+    COMMON:    ["ワカサギ","キンギョ","カダヤシ"],
+    UNCOMMON:  ["ブルーギル","フナ","オイカワ"],
+    RARE:      ["ニジマス","ブラックバス","コイ"],
+    EPIC:      ["イトウ","アカメ","サクラマス"],
+    LEGENDARY: ["シーラカンス","ドラゴンフィッシュ","メガサーモン"]
+  }
+};
+
+// size→[0,1]に正規化
+function normSize(px){
+  return clamp((px - CONFIG.FISH_MIN_SIZE) / (CONFIG.FISH_MAX_SIZE - CONFIG.FISH_MIN_SIZE), 0, 1);
+}
+
+// ランクをロール（ベース確率＋サイズ補正）
+// ベース: C 60%, U 25%, R 10%, E 4%, L 1%
+// 補正: 大きいほど上位に +t*係数 で寄せる（合計1に再正規化）
+function rollRank(sizePx){
+  const t = normSize(sizePx); // 0(小)〜1(大)
+  let pCommon    = 0.60 - 0.30*t;           // 小さいとC寄り
+  let pUncommon  = 0.25 - 0.05*t;
+  let pRare      = 0.10 + 0.15*t;
+  let pEpic      = 0.04 + 0.12*t;
+  let pLegendary = 0.01 + 0.08*t;           // 大きいと伝説寄り
+
+  // マイナス回避＆正規化
+  pCommon    = Math.max(0, pCommon);
+  pUncommon  = Math.max(0, pUncommon);
+  pRare      = Math.max(0, pRare);
+  pEpic      = Math.max(0, pEpic);
+  pLegendary = Math.max(0, pLegendary);
+  const S = pCommon+pUncommon+pRare+pEpic+pLegendary || 1;
+  pCommon/=S; pUncommon/=S; pRare/=S; pEpic/=S; pLegendary/=S;
+
+  const r=Math.random();
+  if(r < pLegendary) return "LEGENDARY";
+  if(r < pLegendary+pEpic) return "EPIC";
+  if(r < pLegendary+pEpic+pRare) return "RARE";
+  if(r < pLegendary+pEpic+pRare+pUncommon) return "UNCOMMON";
+  return "COMMON";
+}
+
+function pickSpecies(rank){
+  const arr = CATCH.speciesByRank[rank] || ["???"];
+  return arr[(Math.random()*arr.length)|0];
+}
+
+// 捕獲時のデバッグ出力
+function debugCatchLog({rank,species,sizePx,hpLeft}){
+  console.log(
+    `[CATCH] rank=${rank} species=${species} size=${Math.round(sizePx)}px hpLeft=${hpLeft}`
+  );
+}
+
 
 const stage = document.getElementById('stage');
 const fishLayer = document.getElementById('fishLayer');
@@ -204,6 +262,13 @@ el.addEventListener('pointerdown',(ev)=>{
 }
 
 function vanishFish(f,caught=false){
+  // ★ caught時にデバッグ出力
+  if (caught) {
+    const rank = rollRank(f.width);
+    const species = pickSpecies(rank);
+    debugCatchLog({rank, species, sizePx: f.width, hpLeft: f.hp});
+  }
+
   f.el.classList.add('vanish');
   setTimeout(()=>{
     const idx=FISHES.indexOf(f);
@@ -250,6 +315,7 @@ addEventListener('load',init);
 </script>
 </body>
 </html>
+
 
 
 
