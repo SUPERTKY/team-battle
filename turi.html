@@ -173,6 +173,20 @@ function debugCatchLog({rank,species,sizePx,hpLeft}){
     `[CATCH] rank=${rank} species=${species} size=${Math.round(sizePx)}px hpLeft=${hpLeft}`
   );
 }
+// 端への接近度（0〜1）。1に近いほど端ギリギリ
+function edgeProximity(x, y, w, h, margin = CONFIG.EDGE_MARGIN) {
+  const dx = Math.min(x - margin, (w - margin) - x);
+  const dy = Math.min(y - margin, (h - margin) - y);
+  const nx = clamp(1 - (dx / margin), 0, 1);
+  const ny = clamp(1 - (dy / margin), 0, 1);
+  return Math.max(nx, ny);
+}
+
+// 角度補間（短い回転方向で補間）
+function lerpAngle(a, b, t){
+  const diff = ((b - a + 540) % 360) - 180;
+  return a + diff * t;
+}
 
 
 const stage = document.getElementById('stage');
@@ -307,8 +321,18 @@ function tick(now){
       f.target=insideBox(w,h);
       f.nextRetarget=now+rand(...CONFIG.RETARGET_SEC)*1000;
     }
-    const desired=Math.atan2(f.target.y-f.y,f.target.x-f.x)*180/Math.PI;
-    f.angle=stepAngle(f.angle,desired,CONFIG.TURN_RATE*dt);
+    const desired = Math.atan2(f.target.y - f.y, f.target.x - f.x) * 180/Math.PI;
+
+// 端に近いほど desired を画面中心方向へ少しだけ寄せる（速度は触らない）
+const prox = edgeProximity(f.x, f.y, w, h, CONFIG.EDGE_MARGIN); // 0〜1
+if (prox > 0) {
+  const centerAngle = Math.atan2((h*0.5) - f.y, (w*0.5) - f.x) * 180/Math.PI;
+  const blended = lerpAngle(desired, centerAngle, Math.min(0.8, prox)); // 最大80%だけ中心寄り
+  f.angle = stepAngle(f.angle, blended, CONFIG.TURN_RATE * dt);
+} else {
+  f.angle = stepAngle(f.angle, desired, CONFIG.TURN_RATE * dt);
+}
+
     const rad=f.angle*DEG2RAD;
     f.x+=Math.cos(rad)*f.speed*dt;
     f.y+=Math.sin(rad)*f.speed*dt;
@@ -331,6 +355,7 @@ addEventListener('load',init);
 </script>
 </body>
 </html>
+
 
 
 
