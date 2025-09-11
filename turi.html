@@ -117,10 +117,7 @@
     <div id="fishLayer"></div>
   </section>
   <!-- HUD: ボタン -->
-<div class="hud">
-  <button id="invBtn" class="btn">🎣 インベントリ</button>
-  <button id="invClearBtn" class="btn" title="インベントリ全消去（Cキー）">🗑 全消去</button>
-</div>
+
 
 <!-- Inventory パネル -->
 <div id="invPanel" class="inv hidden">
@@ -474,19 +471,20 @@ let inventory = loadInv();
 function loadInv(){
   try{
     const j = localStorage.getItem(INV_KEY);
-    return j ? JSON.parse(j) : { total:0, bySpecies:{}, byRank:{} };
-  }catch(_){ return { total:0, bySpecies:{}, byRank:{} }; }
+    return j ? JSON.parse(j) : { total:0, bySpecies:{} };
+  }catch(_){ return { total:0, bySpecies:{} }; }
 }
+
 function saveInv(){ localStorage.setItem(INV_KEY, JSON.stringify(inventory)); }
 
 function addCatchToInv({rank, species, sizePx}){
   inventory.total++;
-  inventory.byRank[rank] = (inventory.byRank[rank]||0)+1;
   inventory.bySpecies[species] = (inventory.bySpecies[species]||0)+1;
   saveInv();
   renderInventory();
-  showToast(`+1 ${species} <span class="pill rank-${rank}">${rank}</span> / ${Math.round(sizePx)}px`);
+  showToast(`+1 ${species} を釣った！（合計 ${inventory.bySpecies[species]}）`);
 }
+
 
 function clearInventory(){
   if(!confirm('インベントリを全て消去しますか？')) return;
@@ -502,26 +500,26 @@ function renderInventory(){
   if(!meta || !list) return;
 
   meta.textContent = `合計 ${inventory.total} 匹`;
-  // 種別は多いと縦に長くなるので、所持数の多い順に上位30だけ表示
+
+  // 名前順でソート
   const entries = Object.entries(inventory.bySpecies)
-    .map(([name, count])=>({name, count}))
-    .sort((a,b)=>b.count-a.count)
-    .slice(0, 30);
+    .sort((a,b)=>a[0].localeCompare(b[0],'ja'));
 
   list.innerHTML = '';
-  for(const e of entries){
+  for(const [name,count] of entries){
     const rowName = document.createElement('div');
     rowName.className = 'row name';
-    rowName.textContent = e.name;
+    rowName.textContent = name;
 
     const rowCount = document.createElement('div');
     rowCount.className = 'row';
-    rowCount.innerHTML = `<span class="pill">${e.count}</span>`;
+    rowCount.innerHTML = `<span class="pill">${count}</span>`;
 
     list.appendChild(rowName);
     list.appendChild(rowCount);
   }
 }
+
 
 function toggleInventory(){
   const p = document.getElementById('invPanel');
@@ -539,6 +537,7 @@ function showToast(html){
 </script>
 </body>
 </html>
+
 
 
 
