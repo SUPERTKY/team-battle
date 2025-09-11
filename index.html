@@ -9,6 +9,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;700&display=swap" rel="stylesheet">
   <style>
+    .hidden { display:none !important; }
+
     :root{
       --bg1:#1a2a6c;
       --bg2:#b21f1f;
@@ -160,86 +162,178 @@
   </style>
 </head>
 <body>
-  <main class="wrap">
-    <section class="card" aria-labelledby="main-title">
-      <h1 id="main-title" class="title">メニュー</h1>
-      <p class="sub">行きたいページを選んでください（キーボード <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> でもOK）</p>
+<main class="wrap">
 
-      <div id="link-grid" class="grid" role="list"></div>
+  <!-- STEP 1: パスワード入力 -->
+  <section id="step-password" class="card">
+    <h1>パスワード入力</h1>
+    <input id="passwordInput" type="password" placeholder="パスワードを入力">
+    <button id="passwordBtn">決定</button>
+  </section>
 
+  <!-- STEP 2: チーム選択 -->
+  <section id="step-team" class="card hidden">
+    <h1>チーム選択</h1>
+    <button class="teamBtn" data-team="1">チーム1</button>
+    <button class="teamBtn" data-team="2">チーム2</button>
+    <button class="teamBtn" data-team="3">チーム3</button>
+    <button class="teamBtn" data-team="4">チーム4</button>
+  </section>
 
-    </section>
-  </main>
+  <!-- STEP 3: 役職選択 -->
+  <section id="step-role" class="card hidden">
+    <h1>役職選択</h1>
+    <button class="roleBtn" data-role="leader">リーダー</button>
+    <button class="roleBtn" data-role="support">サポーター</button>
+    <button class="roleBtn" data-role="hunter">ハンター</button>
+  </section>
+
+  <!-- STEP 4: メニュー（最初のコードのまま） -->
+  <section id="step-menu" class="card hidden">
+    <h1 class="title">メニュー</h1>
+    <div id="link-grid" class="grid"></div>
+  </section>
+</main>
+
 
   <script>
-    // === ここを書き換えるだけでOK ==================================
-    const links = [
-      { name: "釣り", desc: "移動", href: "turi.html", icon: "🎣", key: "1" },
-      { name: "狩り", desc: "移動",     href: "join_room.html",   icon: "🦌", key: "2" },
-      { name: "採取",   desc: "移動",       href: "monitor.html",     icon: "🍄", key: "3" },
-    ];
-    // ===============================================================
+function initMenu(){
+  const links = [
+    { name: "釣り", desc: "移動", href: "turi.html", icon: "🎣", key: "1" },
+    { name: "狩り", desc: "移動", href: "join_room.html", icon: "🦌", key: "2" },
+    { name: "採取", desc: "移動", href: "monitor.html", icon: "🍄", key: "3" },
+  ];
 
-    const grid = document.getElementById("link-grid");
+  const grid = document.getElementById("link-grid");
+  grid.innerHTML = "";
 
-    links.forEach((item, i) => {
-      const a = document.createElement("a");
-      a.className = "btn";
-      a.href = item.href;
-      a.setAttribute("role","listitem");
-      a.setAttribute("aria-label", `${item.name}を開く`);
+  links.forEach((item, i) => {
+    const a = document.createElement("a");
+    a.className = "btn";
+    a.href = item.href;
+    a.setAttribute("role","listitem");
+    a.setAttribute("aria-label", `${item.name}を開く`);
 
-      const icon = document.createElement("div");
-      icon.className = "icon";
-      icon.textContent = item.icon || "🔗";
+    const icon = document.createElement("div");
+    icon.className = "icon";
+    icon.textContent = item.icon || "🔗";
 
-      const label = document.createElement("div");
-      label.className = "label";
+    const label = document.createElement("div");
+    label.className = "label";
 
-      const name = document.createElement("div");
-      name.className = "name";
-      name.textContent = item.name;
+    const name = document.createElement("div");
+    name.className = "name";
+    name.textContent = item.name;
 
-      const desc = document.createElement("div");
-      desc.className = "desc";
-      desc.textContent = item.desc || item.href;
+    const desc = document.createElement("div");
+    desc.className = "desc";
+    desc.textContent = item.desc || item.href;
 
-      const kbd = document.createElement("div");
-      kbd.className = "kbd";
-      kbd.textContent = item.key || i+1;
+    const kbd = document.createElement("div");
+    kbd.className = "kbd";
+    kbd.textContent = item.key || i+1;
 
-      const ripple = document.createElement("span");
-      ripple.className = "ripple";
+    const ripple = document.createElement("span");
+    ripple.className = "ripple";
 
-      label.appendChild(name);
-      label.appendChild(desc);
-      a.appendChild(icon);
-      a.appendChild(label);
-      a.appendChild(kbd);
-      a.appendChild(ripple);
+    label.appendChild(name);
+    label.appendChild(desc);
+    a.appendChild(icon);
+    a.appendChild(label);
+    a.appendChild(kbd);
+    a.appendChild(ripple);
 
-      // リップル座標
-      a.addEventListener("pointerdown", (e) => {
-        const rect = a.getBoundingClientRect();
-        const x = ((e.clientX - rect.left) / rect.width) * 100;
-        const y = ((e.clientY - rect.top) / rect.height) * 100;
-        a.style.setProperty("--x", x + "%");
-        a.style.setProperty("--y", y + "%");
-      });
-
-      grid.appendChild(a);
+    a.addEventListener("pointerdown", (e) => {
+      const rect = a.getBoundingClientRect();
+      const x = ((e.clientX - rect.left) / rect.width) * 100;
+      const y = ((e.clientY - rect.top) / rect.height) * 100;
+      a.style.setProperty("--x", x + "%");
+      a.style.setProperty("--y", y + "%");
     });
 
-    // キーショートカット: 1/2/3 で移動
-    window.addEventListener("keydown", (e) => {
-      const idx = links.findIndex(l => l.key === e.key);
-      if (idx !== -1){
-        window.location.href = links[idx].href;
-      }
-    });
+    grid.appendChild(a);
+  });
+
+  // キーショートカット
+  window.addEventListener("keydown", (e) => {
+    const idx = links.findIndex(l => l.key === e.key);
+    if (idx !== -1){
+      window.location.href = links[idx].href;
+    }
+  });
+}
+
   </script>
+  <script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
+  import { getDatabase, ref, get, child } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js";
+
+  // あなたの Firebase 設定を貼り付けてください
+
+    const firebaseConfig = {
+  apiKey: "AIzaSyDPe5cSCavq5gHopugdOfQ-9_50cTrqmyk",
+  authDomain: "school-178c2.firebaseapp.com",
+      databaseURL: "https://console.firebase.google.com/project/school-178c2/database/school-178c2-default-rtdb/data/~2F?hl=ja",
+  projectId: "school-178c2",
+  storageBucket: "school-178c2.firebasestorage.app",
+  messagingSenderId: "409885673101",
+  appId: "1:409885673101:web:25bf0483547e2d470304c4"
+};
+
+
+  const app = initializeApp(firebaseConfig);
+  const db = getDatabase(app);
+
+  // =============================
+  // 画面制御ロジックをここに追加
+  // =============================
+
+  let userState = { team:null, role:null };
+
+  // STEP1: パスワード確認
+  document.getElementById("passwordBtn").addEventListener("click", async ()=>{
+    const input = document.getElementById("passwordInput").value;
+
+    // Firebase から正解パスワードを取得
+    const snap = await get(child(ref(db), "game/password"));
+    const correct = snap.exists() ? snap.val() : null;
+
+    if(input === correct){
+      document.getElementById("step-password").classList.add("hidden");
+      document.getElementById("step-team").classList.remove("hidden");
+    }else{
+      alert("パスワードが違います");
+    }
+  });
+
+  // STEP2: チーム選択
+  document.querySelectorAll(".teamBtn").forEach(btn=>{
+    btn.addEventListener("click", ()=>{
+      userState.team = btn.dataset.team;
+      document.getElementById("step-team").classList.add("hidden");
+      document.getElementById("step-role").classList.remove("hidden");
+    });
+  });
+
+  // STEP3: 役職選択
+  document.querySelectorAll(".roleBtn").forEach(btn=>{
+   initMenu();
+
+    btn.addEventListener("click", ()=>{
+      userState.role = btn.dataset.role;
+
+      // Firebase に保存する場合はここで書き込み可能
+      // set(ref(db, "players/"+userId), userState);
+
+      document.getElementById("step-role").classList.add("hidden");
+      document.getElementById("step-menu").classList.remove("hidden");
+    });
+  });
+</script>
+
 </body>
 </html>
+
 
 
 
