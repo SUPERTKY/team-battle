@@ -317,11 +317,11 @@ function initMenu(){
 
   // STEP3: 役職選択
   document.querySelectorAll(".roleBtn").forEach(btn=>{
-   initMenu();
+
 
     btn.addEventListener("click", ()=>{
       userState.role = btn.dataset.role;
-
+   initMenu();
       // Firebase に保存する場合はここで書き込み可能
       // set(ref(db, "players/"+userId), userState);
 
@@ -333,6 +333,7 @@ function initMenu(){
 
 </body>
 </html>
+
 
 
 
