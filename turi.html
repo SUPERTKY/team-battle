@@ -125,6 +125,9 @@
   <div class="meta" id="invMeta">合計 0 匹</div>
   <div class="list" id="invList"></div>
 </div>
+<div class="hud">
+  <button id="invBtn" class="btn">🎣 インベントリ</button>
+</div>
 
 <!-- Toast -->
 <div id="toast" class="toast" aria-live="polite"></div>
@@ -168,6 +171,7 @@ const CONFIG = {
   DASH_DIST: 240,
   DASH_TIME: 240
 };
+  
   const INV_LIMIT = 10;
 
   // ===== Catch Roll (sizeが大きいほど上位が出やすい) =====
@@ -494,13 +498,7 @@ function addCatchToInv({rank, species, sizePx}){
 
 
 
-function clearInventory(){
-  if(!confirm('インベントリを全て消去しますか？')) return;
-  inventory = { total:0, bySpecies:{}, byRank:{} };
-  saveInv();
-  renderInventory();
-  showToast('インベントリを消去しました');
-}
+
 
 function renderInventory(){
   const meta = document.getElementById('invMeta');
@@ -545,6 +543,7 @@ function showToast(html){
 </script>
 </body>
 </html>
+
 
 
 
