@@ -507,7 +507,6 @@ function renderInventory(){
 
   meta.textContent = `合計 ${inventory.total} 匹`;
 
-  // 名前順でソート
   const entries = Object.entries(inventory.bySpecies)
     .sort((a,b)=>a[0].localeCompare(b[0],'ja'));
 
@@ -519,12 +518,42 @@ function renderInventory(){
 
     const rowCount = document.createElement('div');
     rowCount.className = 'row';
-    rowCount.innerHTML = `<span class="pill">${count}</span>`;
+    rowCount.innerHTML = `
+      <span class="pill">${count}</span>
+      <button class="btnStore">倉庫</button>
+      <button class="btnDrop">捨てる</button>
+    `;
+
+    // 倉庫にしまう
+    rowCount.querySelector('.btnStore').addEventListener('click', async ()=>{
+      // Firebase チーム1倉庫に追加
+      const dbRef = ref(window.db, "warehouse/team1");
+      await push(dbRef, { species:name, count:1, ts:Date.now() });
+
+      // インベントリから削除
+      inventory.total--;
+      inventory.bySpecies[name]--;
+      if(inventory.bySpecies[name] <= 0) delete inventory.bySpecies[name];
+      saveInv();
+      renderInventory();
+      showToast(`${name} を倉庫にしまいました`);
+    });
+
+    // 捨てる
+    rowCount.querySelector('.btnDrop').addEventListener('click', ()=>{
+      inventory.total--;
+      inventory.bySpecies[name]--;
+      if(inventory.bySpecies[name] <= 0) delete inventory.bySpecies[name];
+      saveInv();
+      renderInventory();
+      showToast(`${name} を捨てました`);
+    });
 
     list.appendChild(rowName);
     list.appendChild(rowCount);
   }
 }
+
 
 
 function toggleInventory(){
@@ -541,8 +570,29 @@ function showToast(html){
 }
 
 </script>
+  <script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
+  import { getDatabase, ref, push } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js";
+
+
+const firebaseConfig = {
+  apiKey: "AIzaSyDPe5cSCavq5gHopugdOfQ-9_50cTrqmyk",
+  authDomain: "school-178c2.firebaseapp.com",
+  databaseURL: "https://school-178c2-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "school-178c2",
+  storageBucket: "school-178c2.firebasestorage.app",
+  messagingSenderId: "409885673101",
+  appId: "1:409885673101:web:25bf0483547e2d470304c4"
+};
+  const app = initializeApp(firebaseConfig);
+  const db = getDatabase(app);
+
+  window.db = db; // 他のスクリプトから使えるようにする
+</script>
+
 </body>
 </html>
+
 
 
 
