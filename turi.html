@@ -168,6 +168,8 @@ const CONFIG = {
   DASH_DIST: 240,
   DASH_TIME: 240
 };
+  const INV_LIMIT = 10;
+
   // ===== Catch Roll (sizeが大きいほど上位が出やすい) =====
 const CATCH = {
   ranks: ["COMMON","UNCOMMON","RARE","EPIC","LEGENDARY"],
@@ -478,12 +480,18 @@ function loadInv(){
 function saveInv(){ localStorage.setItem(INV_KEY, JSON.stringify(inventory)); }
 
 function addCatchToInv({rank, species, sizePx}){
+  if (inventory.total >= INV_LIMIT){
+    showToast("インベントリがいっぱいです");
+    return; // 追加しない
+  }
+
   inventory.total++;
   inventory.bySpecies[species] = (inventory.bySpecies[species]||0)+1;
   saveInv();
   renderInventory();
   showToast(`+1 ${species} を釣った！（合計 ${inventory.bySpecies[species]}）`);
 }
+
 
 
 function clearInventory(){
@@ -537,6 +545,7 @@ function showToast(html){
 </script>
 </body>
 </html>
+
 
 
 
