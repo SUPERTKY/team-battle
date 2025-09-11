@@ -67,6 +67,45 @@
     animation: ripple .5s ease-out forwards;
   }
   @keyframes ripple{ to{ width:140px; height:140px; opacity:0; } }
+  /* === Inventory UI === */
+.hud{
+  position:fixed; right:12px; top:12px; z-index:20; display:flex; gap:8px;
+}
+.btn{
+  background:#0b1c26aa; border:1px solid #7ee0ff66; color:#dff7ff;
+  padding:8px 12px; border-radius:10px; backdrop-filter: blur(4px);
+  font-weight:600; cursor:pointer
+}
+.btn:hover{ background:#0f2a36cc; }
+.inv{
+  position:fixed; right:12px; top:56px; width:min(420px, calc(100vw - 24px));
+  max-height:min(70vh, 520px); overflow:auto; z-index:20;
+  background:#06131bdf; border:1px solid #7ee0ff33; border-radius:12px;
+  backdrop-filter: blur(6px); color:#e8fbff; padding:10px 10px 12px;
+}
+.inv h3{ margin:6px 8px 8px; font-size:16px }
+.inv .meta{ margin:0 8px 8px; font-size:12px; opacity:.8 }
+.inv .list{ display:grid; grid-template-columns: 1fr auto; gap:6px 10px; padding:6px 8px }
+.inv .pill{ padding:2px 8px; border-radius:999px; font-size:12px; border:1px solid #ffffff22 }
+.inv .rank-COMMON{ background:#0f1b21; }
+.inv .rank-UNCOMMON{ background:#10241d; }
+.inv .rank-RARE{ background:#0f1e2c; }
+.inv .rank-EPIC{ background:#1b0f26; }
+.inv .rank-LEGENDARY{ background:#291f0a; }
+.inv .row{ display:contents }
+.inv .name{ white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+.hidden{ display:none !important; }
+
+/* Toast */
+.toast{
+  position:fixed; left:50%; transform:translateX(-50%);
+  bottom:18px; z-index:30; background:#0b1c26f0; color:#e8fbff;
+  border:1px solid #7ee0ff55; border-radius:10px; padding:10px 14px;
+  backdrop-filter: blur(6px); font-size:14px; pointer-events:none; opacity:0;
+  transition: opacity .2s ease, transform .2s ease;
+}
+.toast.show{ opacity:1; transform:translateX(-50%) translateY(-6px); }
+
 </style>
 </head>
 <body>
@@ -77,6 +116,22 @@
     <div class="layer caustics"></div>
     <div id="fishLayer"></div>
   </section>
+  <!-- HUD: ボタン -->
+<div class="hud">
+  <button id="invBtn" class="btn">🎣 インベントリ</button>
+  <button id="invClearBtn" class="btn" title="インベントリ全消去（Cキー）">🗑 全消去</button>
+</div>
+
+<!-- Inventory パネル -->
+<div id="invPanel" class="inv hidden">
+  <h3>インベントリ</h3>
+  <div class="meta" id="invMeta">合計 0 匹</div>
+  <div class="list" id="invList"></div>
+</div>
+
+<!-- Toast -->
+<div id="toast" class="toast" aria-live="polite"></div>
+
 
   <svg width="0" height="0" style="position:absolute">
     <filter id="causticsFilter">
@@ -337,6 +392,9 @@ function vanishFish(f,caught=false){
     const rank = rollRank(f.width);
     const species = pickSpecies(rank);
     debugCatchLog({rank, species, sizePx: f.width, hpLeft: f.hp});
+
+    // ▼ 追記：インベントリ登録
+    addCatchToInv({ rank, species, sizePx: f.width });
   }
 
   f.el.classList.add('vanish');
@@ -392,9 +450,80 @@ function init(){
   requestAnimationFrame(tick);
 }
 addEventListener('load',init);
+  // === Inventory ===
+const INV_KEY = 'turi_inventory_v1';
+const RANKS = CATCH.ranks; // ["COMMON","UNCOMMON",...]
+let inventory = loadInv();
+
+function loadInv(){
+  try{
+    const j = localStorage.getItem(INV_KEY);
+    return j ? JSON.parse(j) : { total:0, bySpecies:{}, byRank:{} };
+  }catch(_){ return { total:0, bySpecies:{}, byRank:{} }; }
+}
+function saveInv(){ localStorage.setItem(INV_KEY, JSON.stringify(inventory)); }
+
+function addCatchToInv({rank, species, sizePx}){
+  inventory.total++;
+  inventory.byRank[rank] = (inventory.byRank[rank]||0)+1;
+  inventory.bySpecies[species] = (inventory.bySpecies[species]||0)+1;
+  saveInv();
+  renderInventory();
+  showToast(`+1 ${species} <span class="pill rank-${rank}">${rank}</span> / ${Math.round(sizePx)}px`);
+}
+
+function clearInventory(){
+  if(!confirm('インベントリを全て消去しますか？')) return;
+  inventory = { total:0, bySpecies:{}, byRank:{} };
+  saveInv();
+  renderInventory();
+  showToast('インベントリを消去しました');
+}
+
+function renderInventory(){
+  const meta = document.getElementById('invMeta');
+  const list = document.getElementById('invList');
+  if(!meta || !list) return;
+
+  meta.textContent = `合計 ${inventory.total} 匹`;
+  // 種別は多いと縦に長くなるので、所持数の多い順に上位30だけ表示
+  const entries = Object.entries(inventory.bySpecies)
+    .map(([name, count])=>({name, count}))
+    .sort((a,b)=>b.count-a.count)
+    .slice(0, 30);
+
+  list.innerHTML = '';
+  for(const e of entries){
+    const rowName = document.createElement('div');
+    rowName.className = 'row name';
+    rowName.textContent = e.name;
+
+    const rowCount = document.createElement('div');
+    rowCount.className = 'row';
+    rowCount.innerHTML = `<span class="pill">${e.count}</span>`;
+
+    list.appendChild(rowName);
+    list.appendChild(rowCount);
+  }
+}
+
+function toggleInventory(){
+  const p = document.getElementById('invPanel');
+  if(p) p.classList.toggle('hidden');
+}
+function showToast(html){
+  const t = document.getElementById('toast');
+  if(!t) return;
+  t.innerHTML = html;
+  t.classList.add('show');
+  clearTimeout(showToast._timer);
+  showToast._timer = setTimeout(()=> t.classList.remove('show'), 1600);
+}
+
 </script>
 </body>
 </html>
+
 
 
 
