@@ -525,43 +525,39 @@ function renderInventory(){
     `;
 
     // 倉庫にしまう
-rowCount.querySelector('.btnStore').addEventListener('click', async ()=>{
-  // Firebase モジュールを window.firebaseDB から取り出す
-  const { db, ref, push } = window.firebaseDB;
-  const dbRef = ref(db, "warehouse/team1");
-  await push(dbRef, { species:name, count:1, ts:Date.now() });
+    rowCount.querySelector('.btnStore').addEventListener('click', async ()=>{
+      const { db, ref, push } = window.firebaseDB;
+      const dbRef = ref(db, "warehouse/team1");
+      await push(dbRef, { species:name, count:1, ts:Date.now() });
 
-  // インベントリから削除
-  inventory.total--;
-  inventory.bySpecies[name]--;
-  if(inventory.bySpecies[name] <= 0) delete inventory.bySpecies[name];
-  saveInv();
-  renderInventory();
-  showToast(`${name} を倉庫にしまいました`);
-});
-
+      // インベントリから削除
+      if(inventory.bySpecies[name]){
+        inventory.total--;
+        inventory.bySpecies[name]--;
+        if(inventory.bySpecies[name] <= 0) delete inventory.bySpecies[name];
+        saveInv();
+        renderInventory();
+        showToast(`${name} を倉庫にしまいました`);
+      }
+    });
 
     // 捨てる
-rowCount.querySelector('.btnStore').addEventListener('click', async ()=>{
-  // Firebase モジュールを window.firebaseDB から取り出す
-  const { db, ref, push } = window.firebaseDB;
-  const dbRef = ref(db, "warehouse/team1");
-  await push(dbRef, { species:name, count:1, ts:Date.now() });
-
-  // インベントリから削除
-  inventory.total--;
-  inventory.bySpecies[name]--;
-  if(inventory.bySpecies[name] <= 0) delete inventory.bySpecies[name];
-  saveInv();
-  renderInventory();
-  showToast(`${name} を倉庫にしまいました`);
-});
-
+    rowCount.querySelector('.btnDrop').addEventListener('click', ()=>{
+      if(inventory.bySpecies[name]){
+        inventory.total--;
+        inventory.bySpecies[name]--;
+        if(inventory.bySpecies[name] <= 0) delete inventory.bySpecies[name];
+        saveInv();
+        renderInventory();
+        showToast(`${name} を捨てました`);
+      }
+    });
 
     list.appendChild(rowName);
     list.appendChild(rowCount);
   }
 }
+
 
 
 
@@ -603,6 +599,7 @@ const firebaseConfig = {
 
 </body>
 </html>
+
 
 
 
