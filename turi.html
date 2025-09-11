@@ -449,6 +449,22 @@ function init(){
   for(let i=0;i<CONFIG.FISH_MAX_COUNT;i++) spawnFish();
   requestAnimationFrame(tick);
 }
+  // === Inventory 初期化/UIイベント ===
+addEventListener('load', () => {
+  renderInventory();
+
+  const btn = document.getElementById('invBtn');
+  const clr = document.getElementById('invClearBtn');
+  btn && btn.addEventListener('click', toggleInventory);
+  clr && clr.addEventListener('click', clearInventory);
+
+  // キー操作: Iで開閉 / Cで全消去
+  addEventListener('keydown', (e)=>{
+    if(e.key==='i' || e.key==='I'){ toggleInventory(); }
+    if(e.key==='c' || e.key==='C'){ clearInventory(); }
+  });
+});
+
 addEventListener('load',init);
   // === Inventory ===
 const INV_KEY = 'turi_inventory_v1';
@@ -523,6 +539,7 @@ function showToast(html){
 </script>
 </body>
 </html>
+
 
 
 
