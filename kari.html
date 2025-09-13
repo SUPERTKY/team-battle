@@ -20,19 +20,20 @@
       overflow: hidden;
     }
 
-    /* 下の四角（背景とは別） */
+    /* 下の四角（透過パネル） */
     .bottom-rect {
       position: absolute;
       left: 0;
       right: 0;
       bottom: 0;
-      height: 55.55vh; /* 全体の9分の5 ≒ 55.55% */
-      background: rgba(255, 255, 255, 0.9); /* 白＋透明度 */
+      height: 44.44vh; /* 全体の9分の4 ≒ 44.44% */
+      background: rgba(255, 255, 255, 0.6); /* 白＋透明度60% */
       border-top: 1px solid rgba(0, 0, 0, 0.1);
       box-shadow: 0 -8px 20px rgba(0, 0, 0, 0.25);
       display: flex;
       align-items: center;
       justify-content: center;
+      backdrop-filter: blur(6px); /* 背景を少しぼかす */
     }
 
     .content {
@@ -44,10 +45,10 @@
 </head>
 <body>
   <div class="stage">
-    <!-- 下の四角 -->
+    <!-- 下の透過四角 -->
     <div class="bottom-rect">
       <div class="content">
-        高さ：全体の9分の5（55.55%）
+        高さ：全体の9分の4（44.44%）＋透過パネル
       </div>
     </div>
   </div>
