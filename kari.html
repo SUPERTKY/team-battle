@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>透明な下パネル＋キャラ湧き</title>
+  <title>透明パネル＋自動スポーン（2フレーム歩き）</title>
   <style>
     html, body { margin:0; height:100%; }
     .stage{
@@ -11,35 +11,32 @@
       background: url("assets/sougen.png") center/cover no-repeat;
     }
 
-    /* 完全透明＆クリック不可の下パネル（高さ：全体の9分の4 ≒ 44.44%） */
+    /* 透明＆クリック不可の下パネル（9分の4） */
     .bottom-rect{
       position:absolute; left:0; right:0; bottom:0;
       height:44.44vh; background: transparent;
-      pointer-events: none;       /* ← パネルはクリックを拾わない */
-      z-index: 10;
+      pointer-events: none; z-index: 10;
     }
 
-    /* 役者（キャラクター）を載せる層。層自体はクリック不可だが、中の画像は可 */
+    /* 役者レイヤ（自体はクリック拾わず、中の画像のみ拾う） */
     .actors-layer{
       position:absolute; left:0; right:0; bottom:0; height:44.44vh;
-      pointer-events: none;       /* 層は拾わない */
-      z-index: 20;
+      pointer-events: none; z-index: 20;
     }
 
-    /* キャラクター画像はクリック可（個別に） */
+    /* キャラクター（少し大型化） */
     .actor{
-      position:absolute; width:96px; height:auto;
-      pointer-events: auto;       /* ← 画像はクリック可能 */
-      user-select: none; -webkit-user-drag: none;
+      position:absolute; width:144px; height:auto;
+      pointer-events: auto; user-select: none; -webkit-user-drag: none;
       filter: drop-shadow(0 4px 8px rgba(0,0,0,0.35));
       transition: transform 120ms ease;
+      image-rendering: auto;
     }
     .actor:active{ transform: scale(0.96); }
 
-    /* UIボタン */
+    /* UI */
     .controls{
-      position:absolute; top:12px; right:12px; z-index:30;
-      display:flex; gap:8px;
+      position:absolute; top:12px; right:12px; z-index:30; display:flex; gap:8px;
     }
     .btn{
       padding:10px 14px; border-radius:10px; border:1px solid rgba(0,0,0,0.15);
@@ -48,95 +45,154 @@
       cursor:pointer;
     }
     .btn:disabled{ opacity:.5; cursor:not-allowed; }
-    .cap{
-      position:absolute; bottom:46vh; left:50%; transform:translateX(-50%);
-      background:#00000080; color:#fff; padding:6px 10px; border-radius:8px;
-      font:600 12px/1 system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans JP", sans-serif;
-      z-index:25; pointer-events:none;
-    }
   </style>
 </head>
 <body>
   <div class="stage" id="stage">
-    <!-- 透明・非クリックのパネル（目に見えないガイド） -->
     <div class="bottom-rect" id="panel"></div>
-
-    <!-- パネル上に重ねるキャラクター用の層 -->
     <div class="actors-layer" id="actorsLayer"></div>
 
-    <!-- ちょいメッセージ -->
-    <div class="cap">下エリア（9分の4）は透明ですが、この上にキャラが湧きます</div>
-
-    <!-- コントロール -->
     <div class="controls">
-      <button class="btn" id="spawnBtn">Spawn（湧かす）</button>
-      <button class="btn" id="clearBtn">Clear</button>
+      <button class="btn" id="clearBtn">Clear（全消し）</button>
     </div>
   </div>
 
   <script>
-    // 設定：キャラ画像のパス（差し替えてOK）
-    const CHARACTER_SRC = "assets/suraimu1frame.png"; // 例：assets/char1.png に置き換え可
-    const MAX_ACTORS = 6;
-    const ACTOR_WIDTH = 96;  // CSS と合わせる
-    const ACTOR_HEIGHT = 96; // 大体の高さ（縦横比により変わるので余裕を持って確保）
+    // ===== 設定 =====
+    // 2フレーム画像のパス（必要に応じて変更）
+    const FRAME1_SRC = "assets/suraimu1frame.png";
+    const FRAME2_SRC = "assets/suraimu2frame.png";
 
+    const MAX_ACTORS = 6;
+    const ACTOR_WIDTH = 144;  // CSS と合わせる
+    const ACTOR_HEIGHT = 144; // 目安（縦横比により上下に余裕を持つ）
+
+    // スポーン間隔（ランダム）[ms]
+    const SPAWN_MIN_MS = 900;   // 最短 0.9 秒
+    const SPAWN_MAX_MS = 3000;  // 最長 3.0 秒
+
+    // 歩行アニメの切替間隔（2フレーム）
+    const WALK_FRAME_MS = 180;  // 0.18秒ごとに切替
+
+    // ===== 参照 =====
     const actorsLayer = document.getElementById("actorsLayer");
-    const spawnBtn = document.getElementById("spawnBtn");
     const clearBtn = document.getElementById("clearBtn");
+
+    let spawnTimerId = null;     // setTimeout のID
+    let spawnPaused = false;     // 上限に達して一時停止中か
 
     function countActors(){
       return actorsLayer.querySelectorAll(".actor").length;
     }
 
-    function updateButtons(){
-      spawnBtn.disabled = countActors() >= MAX_ACTORS;
+    function rand(min, max){ return Math.random() * (max - min) + min; }
+    function randInt(min, max){ return Math.floor(rand(min, max + 1)); }
+
+    function scheduleNextSpawn(){
+      // 既にスケジュールがあれば何もしない
+      if (spawnTimerId !== null || spawnPaused) return;
+      const delay = Math.floor(rand(SPAWN_MIN_MS, SPAWN_MAX_MS));
+      spawnTimerId = setTimeout(() => {
+        spawnTimerId = null;
+        trySpawnAndReschedule();
+      }, delay);
     }
 
-    function rand(min, max){ return Math.random() * (max - min) + min; }
+    function trySpawnAndReschedule(){
+      if (countActors() >= MAX_ACTORS){
+        spawnPaused = true; // 満杯なので一時停止
+        return;
+      }
+      spawnActor();
+      scheduleNextSpawn();
+    }
+
+    function startSpawningIfNeeded(){
+      if (countActors() < MAX_ACTORS){
+        spawnPaused = false;     // 再開可能
+        scheduleNextSpawn();
+      }
+    }
 
     function spawnActor(){
       if (countActors() >= MAX_ACTORS) return;
 
       const rect = actorsLayer.getBoundingClientRect();
-
-      // はみ出さないようにランダム位置を計算
       const maxX = Math.max(0, rect.width - ACTOR_WIDTH);
       const maxY = Math.max(0, rect.height - ACTOR_HEIGHT);
+
       const x = rand(0, maxX);
       const y = rand(0, maxY);
 
       const img = document.createElement("img");
-      img.src = CHARACTER_SRC;
+      img.src = FRAME1_SRC;
       img.className = "actor";
       img.style.left = `${x}px`;
       img.style.top  = `${y}px`;
       img.alt = "character";
 
-      // クリックで軽いアクション（例：消える）
+      // 2フレーム歩き（交互表示）
+      let toggle = false;
+      const walkTimer = setInterval(()=>{
+        toggle = !toggle;
+        img.src = toggle ? FRAME2_SRC : FRAME1_SRC;
+      }, WALK_FRAME_MS);
+      // 後から消すために保持
+      img.dataset.walkTimer = String(walkTimer);
+
+      // クリックで消す
       img.addEventListener("click", (e)=>{
         e.stopPropagation();
-        img.remove();
-        updateButtons();
+        removeActor(img);
       });
 
       actorsLayer.appendChild(img);
-      updateButtons();
+
+      // 上限到達したら一時停止（次のスケジュールは立てない）
+      if (countActors() >= MAX_ACTORS){
+        spawnPaused = true;
+        if (spawnTimerId !== null){
+          clearTimeout(spawnTimerId);
+          spawnTimerId = null;
+        }
+      }
+    }
+
+    function removeActor(img){
+      // 歩行タイマー停止
+      const id = Number(img.dataset.walkTimer);
+      if (!Number.isNaN(id)) clearInterval(id);
+      img.remove();
+
+      // 空きができたら自動スポーン再開
+      if (spawnPaused && countActors() < MAX_ACTORS){
+        spawnPaused = false;
+        scheduleNextSpawn();
+      }
     }
 
     function clearActors(){
-      actorsLayer.querySelectorAll(".actor").forEach(el => el.remove());
-      updateButtons();
+      actorsLayer.querySelectorAll(".actor").forEach(img=>{
+        const id = Number(img.dataset.walkTimer);
+        if (!Number.isNaN(id)) clearInterval(id);
+        img.remove();
+      });
+      spawnPaused = false;
+      if (spawnTimerId !== null){
+        clearTimeout(spawnTimerId);
+        spawnTimerId = null;
+      }
+      // すぐ次のスポーンを予約
+      scheduleNextSpawn();
     }
 
-    spawnBtn.addEventListener("click", spawnActor);
     clearBtn.addEventListener("click", clearActors);
 
-    // 初期状態
-    updateButtons();
+    // 初期起動：自動スポーン開始
+    scheduleNextSpawn();
 
-    // リサイズ時も安全側にボタン状態など維持（配置はそのまま）
-    window.addEventListener("resize", ()=>{ updateButtons(); });
+    // リサイズしても配置は維持。必要なら再配置ロジックを入れてください。
+    window.addEventListener("resize", ()=>{ /* no-op */ });
   </script>
 </body>
 </html>
