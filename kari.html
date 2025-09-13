@@ -3,57 +3,55 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>押し合いゲージ（青vs赤）</title>
+  <title>撃破ドロップ＆自動リロード＆多キャラ対応</title>
   <style>
-/* 置き換え */
-.actor{
-  position:absolute; width:144px; height:auto;
-  pointer-events:auto; user-select:none; -webkit-user-drag:none;
-  filter:drop-shadow(0 4px 8px rgba(0,0,0,0.35));
-  transition: transform 120ms ease, filter 80ms ease; /* ← filterもトランジション */
-  will-change:left, top, transform, filter;
-}
-.actor:active{ transform:scale(0.96); }
-
-/* 追記：一瞬だけ赤フラッシュ（オレンジ対策） */
-.actor.hurt{
-  /* グレースケール→セピア→超サチュレート→微調整で“赤”に寄せる */
-  filter:
-    drop-shadow(0 4px 8px rgba(0,0,0,0.35))
-    grayscale(1)
-    sepia(1)
-    saturate(8000%)
-    hue-rotate(-8deg)
-    brightness(1.15)
-    contrast(1.1);
-}
-
-
     html, body { margin:0; height:100%; }
     .stage{
       position:relative; width:100vw; height:100vh; overflow:hidden;
       background: url("assets/sougen.png") center/cover no-repeat;
     }
-    .bottom-rect{ position:absolute; left:0; right:0; bottom:0; height:44.44vh; pointer-events:none; z-index:10; }
-    .actors-layer{ position:absolute; left:0; right:0; bottom:0; height:44.44vh; pointer-events:none; z-index:20; }
+
+    /* 透明の移動範囲（下 9分の4） */
+    .bottom-rect{
+      position:absolute; left:0; right:0; bottom:0;
+      height:44.44vh; background: transparent;
+      pointer-events:none; z-index:10;
+    }
+
+    /* キャラレイヤ（移動範囲と同サイズ） */
+    .actors-layer{
+      position:absolute; left:0; right:0; bottom:0; height:44.44vh;
+      pointer-events:none; z-index:20;
+    }
 
     .actor{
-      position:absolute; width:144px; height:auto; pointer-events:auto;
-      user-select:none; -webkit-user-drag:none;
+      position:absolute; width:144px; height:auto;
+      pointer-events:auto; user-select:none; -webkit-user-drag:none;
       filter:drop-shadow(0 4px 8px rgba(0,0,0,0.35));
-      transition: transform 120ms ease;
-      will-change:left, top, transform;
+      transition: transform 120ms ease, filter 80ms ease;
+      will-change: left, top, transform, filter;
     }
     .actor:active{ transform:scale(0.96); }
 
-    @keyframes vanish {
-      0%{opacity:1; transform: translateY(0) scale(1)}
-      60%{opacity:.6; transform: translateY(6px) scale(.9)}
-      100%{opacity:0; transform: translateY(12px) scale(.75)}
-    }
-    .vanish{ animation: vanish 380ms ease forwards; }
+    /* 下にいるほど手前（z-index はJSで更新） */
 
-    /* ===== バトルHUD ===== */
+    /* 消え方：自然フェード＋縮小 */
+    @keyframes vanish {
+      0%   { opacity:1; transform: translateY(0)   scale(1)    }
+      60%  { opacity:.6; transform: translateY(6px) scale(.9)  }
+      100% { opacity:0; transform: translateY(12px) scale(.75) }
+    }
+    .vanish { animation: vanish 380ms ease forwards; }
+
+    /* 被弾（赤フラッシュ） */
+    .actor.hurt{
+      filter:
+        drop-shadow(0 4px 8px rgba(0,0,0,0.35))
+        grayscale(1) sepia(1) saturate(8000%) hue-rotate(-8deg)
+        brightness(1.15) contrast(1.1);
+    }
+
+    /* ===== バトルHUD（押し合いゲージ：青vs赤） ===== */
     .hud-mask{
       position:fixed; inset:0; background: rgba(0,0,0,0.3);
       display:none; align-items:center; justify-content:center;
@@ -69,7 +67,6 @@
     .hud-title{ display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; font-weight:700; }
     .vs-row{ display:flex; gap:10px; align-items:center; justify-content:space-between; margin-bottom:10px; opacity:.9; }
 
-    /* 押し合いゲージ：左=青、右=赤、中央に境界線 */
     .gauge{ position:relative; height:28px; border-radius:999px; overflow:hidden;
       background:#0a0f1a; border:1px solid #ffffff14; }
     .gauge .blue{
@@ -88,7 +85,6 @@
       transition: left 40ms linear;
     }
     .tap-hint{ margin-top:8px; text-align:center; font-size:12px; opacity:.85; }
-
     .enemy-throb{ animation: throb 140ms ease; }
     @keyframes throb{
       0%{ box-shadow: inset 0 0 0 0 rgba(255,255,255,0.0);}
@@ -96,22 +92,32 @@
       100%{ box-shadow: inset 0 0 0 0 rgba(255,255,255,0.0);}
     }
 
-    /* 勝利表示 */
-    .win-panel{
-      position:fixed; inset:0; display:none; align-items:center; justify-content:center;
-      z-index:1100; background: rgba(0,0,0,0.55); backdrop-filter: blur(2px);
+    /* ===== ドロップ表示（食材） ===== */
+    .loot{
+      position:absolute; padding:6px 10px; border-radius:12px;
+      background:#111827e6; color:#fff; font:700 12px/1 system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans JP",sans-serif;
+      border:1px solid rgba(255,255,255,0.1); pointer-events:none;
+      filter: drop-shadow(0 6px 16px rgba(0,0,0,0.45));
+      animation: loot-pop 1100ms ease forwards;
+      z-index: 2000;
     }
-    .win-card{
-      width:min(92vw,700px); background:#0b1020f0; color:#fff;
-      border:1px solid rgba(255,255,255,0.12); border-radius:16px;
-      box-shadow:0 25px 60px rgba(0,0,0,0.55);
-      padding:16px; text-align:center;
+    @keyframes loot-pop{
+      0%   { transform: translateY(0) scale(.9); opacity:0 }
+      15%  { transform: translateY(-8px) scale(1.02); opacity:1 }
+      70%  { transform: translateY(-16px) scale(1); opacity:1 }
+      100% { transform: translateY(-26px) scale(.98); opacity:0 }
     }
-    .win-card h2{ margin:8px 0 12px; font-size:22px; }
-    .win-art{ display:block; margin:0 auto 10px; max-width:100%; height:auto; filter: drop-shadow(0 10px 24px rgba(0,0,0,0.45)); }
-    .win-actions{ margin-top:10px; }
-    .btn{ padding:10px 16px; border-radius:12px; border:1px solid rgba(255,255,255,0.15); background:#1f2937; color:#fff; cursor:pointer; font-weight:700; }
-    .btn:hover{ filter:brightness(1.05); }
+
+    /* “キャラをゲット！” トースト（非モーダル） */
+    .toast{
+      position:fixed; top:12px; left:50%; transform:translateX(-50%);
+      background:#111827e6; color:#fff; padding:10px 14px; border-radius:12px;
+      border:1px solid rgba(255,255,255,0.12); z-index:1200;
+      font:700 14px/1 system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans JP",sans-serif;
+      animation: toast-in 300ms ease, toast-out 300ms ease 1400ms forwards;
+    }
+    @keyframes toast-in{ from{opacity:0; transform:translate(-50%,-6px)} to{opacity:1; transform:translate(-50%,0)} }
+    @keyframes toast-out{ to{ opacity:0; transform:translate(-50%,-8px) } }
   </style>
 </head>
 <body>
@@ -128,80 +134,126 @@
         <span id="timerLbl"></span>
       </div>
       <div class="vs-row">
-        <span>あなた（青）</span><span>VS</span><span>スライム（赤）</span>
+        <span>あなた（青）</span><span>VS</span><span id="enemyNameLbl">モンスター（赤）</span>
       </div>
       <div class="gauge" id="gauge">
         <div class="blue" id="blueFill"></div>
         <div class="red"  id="redFill"></div>
         <div class="divider" id="divider"></div>
       </div>
-      <div class="tap-hint">このパネルを連打！ 押し切れば勝ち（画像＆「キャラをゲット！」）</div>
-    </div>
-  </div>
-
-  <!-- 勝利表示 -->
-  <div class="win-panel" id="winPanel">
-    <div class="win-card">
-      <img class="win-art" id="winArt" src="assets/get_banner.png" alt="get!" />
-      <h2>キャラをゲット！</h2>
-      <div class="win-actions">
-        <button class="btn" id="winOkBtn">OK</button>
-      </div>
+      <div class="tap-hint">このパネルを連打！ 押し切れば勝ち（撃破と同時にドロップ）</div>
     </div>
   </div>
 
   <script>
-    const FRAME1_SRC = "assets/suraimu1frame.png";
-    const FRAME2_SRC = "assets/suraimu2frame.png";
+    // ===== モンスター定義（ここに種類を増やせる） =====
+    const MONSTERS = [
+      {
+        id: "slime",
+        name: "スライム",
+        strength: 1.0, // 強さ（大きいほど敵が強い）
+        frames: ["assets/suraimu1frame.png", "assets/suraimu2frame.png"],
+        drops: ["スライム"], // ★初期は「スライム」食材。複数OK（例: ["スライム","ねばねば草"]）
+      },
+      // 追加例：
+      // {
+      //   id: "goblin",
+      //   name: "ゴブリン",
+      //   strength: 1.3,
+      //   frames: ["assets/goblin1.png", "assets/goblin2.png"],
+      //   drops: ["硬い肉","骨"],
+      // },
+    ];
 
+    // ===== 調整用パラメータ =====
     const MAX_ACTORS = 6;
     const ACTOR_WIDTH = 144, ACTOR_HEIGHT = 144;
     const WALK_FRAME_MS = 200, WALK_SPEED = 60;
 
-    const actorsLayer = document.getElementById("actorsLayer");
+    // バトル難易度（基準値・モンスター強さでスケール）
+    const PLAYER_PUSH = 3.2;      // クリック1回で右へ何％進むか
+    const ENEMY_BASE_PER_SEC = 0.35; // 敵の常時押し（％/秒）
+    const ENEMY_BURST_POW   = 1.2;   // 敵のバースト1回の押し量（％）
+    const BURST_MIN_MS = 340, BURST_MAX_MS = 620;
 
-    // ===== 重なり順：下ほど前面 =====
+    // ===== 要素 =====
+    const actorsLayer = document.getElementById("actorsLayer");
+    const hudMask = document.getElementById("hudMask");
+    const hud = document.getElementById("hud");
+    const blueFill = document.getElementById("blueFill");
+    const redFill  = document.getElementById("redFill");
+    const divider  = document.getElementById("divider");
+    const gaugeEl  = document.getElementById("gauge");
+    const enemyNameLbl = document.getElementById("enemyNameLbl");
+
+    // ===== 共通ユーティリティ =====
+    function rand(min,max){ return Math.random()*(max-min)+min; }
+    function pick(arr){ return arr[Math.floor(Math.random()*arr.length)] }
+
+    // 下にいるほど前面
     function updateDepth(img){
       const y = parseFloat(img.style.top) || 0;
       img.style.zIndex = String(1000 + Math.floor(y));
     }
-    function rand(min,max){ return Math.random()*(max-min)+min; }
 
+    function flashHurt(img){
+      if (!img || !img.isConnected) return;
+      img.classList.add("hurt");
+      setTimeout(()=> img.classList.remove("hurt"), 120);
+    }
+
+    function showToast(text){
+      const el = document.createElement("div");
+      el.className = "toast";
+      el.textContent = text;
+      document.body.appendChild(el);
+      setTimeout(()=> el.remove(), 1800);
+    }
+
+    // ===== スポーン＆歩行 =====
     function spawnActor(){
       const rect = actorsLayer.getBoundingClientRect();
       const maxX = Math.max(0, rect.width - ACTOR_WIDTH);
       const maxY = Math.max(0, rect.height - ACTOR_HEIGHT);
       const x = rand(0,maxX), y = rand(0,maxY);
 
-      const img = document.createElement("img");
-      img.src = FRAME1_SRC; img.className="actor";
+      const monster = pick(MONSTERS);
+      const img = new Image();
+      img.src = monster.frames[0];
+      img.className="actor";
       img.style.left=`${x}px`; img.style.top =`${y}px`;
       img.style.transform = "scaleX(1)";
+      // 参照を持たせる（種類・フレーム・強さ・ドロップ）
+      img.__mon = monster;
+
       actorsLayer.appendChild(img);
       updateDepth(img);
+
+      // 歩行ループ開始
       scheduleWalk(img);
 
+      // クリックでバトル
       img.addEventListener("click", (e)=>{
         e.stopPropagation();
         if (battleActive) return;
         startBattle(img);
       });
+
+      return img;
     }
 
-// 置き換え版：バトル中はポーリングして再トライ
-function scheduleWalk(img){
-  const rest = rand(1000, 4000); // 1〜4秒休憩
-  setTimeout(function tryStart(){
-    if (!img.isConnected) return;      // 既に消えてたら終了
-    if (battleActive){                  // バトル中は待って再トライ
-      setTimeout(tryStart, 400);        // ← 0.4秒ごとに再確認
-      return;
+    // バトル中は休憩後に短い間隔で再トライして、終わったら必ず歩き出す
+    function scheduleWalk(img){
+      const rest = rand(1000, 4000); // 1〜4秒休憩
+      setTimeout(function tryStart(){
+        if (!img.isConnected) return;
+        if (battleActive){
+          setTimeout(tryStart, 400); // バトル中は0.4秒ごとに再試行
+          return;
+        }
+        walkToRandom(img, ()=>{ scheduleWalk(img); });
+      }, rest);
     }
-    // バトルが終わっていたら歩行開始
-    walkToRandom(img, ()=>{ scheduleWalk(img); });
-  }, rest);
-}
-
 
     function walkToRandom(img, onFinish){
       const rect = actorsLayer.getBoundingClientRect();
@@ -218,16 +270,18 @@ function scheduleWalk(img){
 
       let startTime=null, toggle=false;
       const frameTimer=setInterval(()=>{
-        toggle=!toggle; img.src = toggle ? FRAME2_SRC : FRAME1_SRC;
+        if (!img.isConnected) { clearInterval(frameTimer); return; }
+        toggle=!toggle; img.src = toggle ? img.__mon.frames[1] : img.__mon.frames[0];
       },WALK_FRAME_MS);
 
       function step(ts){
+        if (!img.isConnected){ clearInterval(frameTimer); return; }
         if (!startTime) startTime=ts;
         const t=(ts-startTime)/duration;
         if (t>=1){
           img.style.left=`${targetX}px`; img.style.top =`${targetY}px`;
-          updateDepth(img); clearInterval(frameTimer); img.src=FRAME1_SRC;
-          if(onFinish) onFinish(); return;
+          updateDepth(img); clearInterval(frameTimer); img.src=img.__mon.frames[0];
+          onFinish && onFinish(); return;
         }
         img.style.left=`${startX+dx*t}px`;
         img.style.top =`${startY+dy*t}px`;
@@ -237,15 +291,20 @@ function scheduleWalk(img){
       requestAnimationFrame(step);
     }
 
+    // ===== 自動リロード（常に6体キープ） =====
+    function countActors(){ return actorsLayer.querySelectorAll(".actor").length; }
+    function scheduleRespawn(){
+      // 少し間をおいて補充（演出のため）
+      setTimeout(()=>{
+        if (!battleActive && countActors() < MAX_ACTORS) spawnActor();
+        // 万一複数欠けたら埋まるまで繰り返し
+        while (!battleActive && countActors() < MAX_ACTORS) spawnActor();
+      }, rand(400,1200));
+    }
+
     // ===== バトル：押し合いゲージ（青vs赤） =====
     let battleActive = false, battleTarget = null, enemyTimer = null;
-    let p = 50; // 青の前線位置（%）。0=敵勝利、100=あなた勝利
-    const hudMask = document.getElementById("hudMask");
-    const hud = document.getElementById("hud");
-    const blueFill = document.getElementById("blueFill");
-    const redFill  = document.getElementById("redFill");
-    const divider  = document.getElementById("divider");
-    const gaugeEl  = document.getElementById("gauge");
+    let p = 50; // 青の前線位置（0〜100）
 
     function renderGauge(){
       const clamped = Math.max(0, Math.min(100, p));
@@ -253,110 +312,117 @@ function scheduleWalk(img){
       redFill.style.width  = (100 - clamped) + "%";
       divider.style.left   = clamped + "%";
     }
-// どこでもOK（startBattleの上あたりに）
-function flashHurt(img){
-  if (!img || !img.isConnected) return;
-  img.classList.add("hurt");
-  setTimeout(()=> img.classList.remove("hurt"), 120); // 0.12秒で戻す
-}
-
 
     function startBattle(targetImg){
-      battleActive = true; battleTarget = targetImg; p = 50; renderGauge();
+      battleActive = true;
+      battleTarget = targetImg;
+      p = 50;
+      renderGauge();
+
+      enemyNameLbl.textContent = `${targetImg.__mon.name}（赤）`;
       hudMask.style.display = "flex";
 
-      // === 難易度調整（敵を弱めた） ===
-// --- startBattle 内（定義する数値だけ差し替え） ---
-const basePush  = 3.2;     // ★プレイヤー1クリックで +3.2% 進む
-const enemyBase = 0.40/60; // ★敵の常時押し：毎秒 0.40%（= 0.0067/フレーム）
-const burstPow  = 1.6;     // ★敵のバースト1回で -1.6%
-const burstMin  = 320;     // ★敵バースト間隔（やや遅め）
-const burstMax  = 620;
+      // 敵の強さで難易度スケール
+      const s = targetImg.__mon.strength || 1.0;
+      const enemyBasePerFrame = (ENEMY_BASE_PER_SEC * s) / 60;
+      const burstPow = ENEMY_BURST_POW * s;
 
-
-      // 敵の押し（60fps想定）
+      // 敵の押し（60fps相当）
       let lastBurstAt = performance.now();
       enemyTimer = setInterval(()=>{
         if (!battleActive) return;
-        p -= enemyBase; // 左へ押される
-        const now = performance.now();
-        if (now - lastBurstAt > rand(burstMin, burstMax)){
-          p -= burstPow; // たまにグッと押す
-          lastBurstAt = now;
+        p -= enemyBasePerFrame; // 敵が押す＝左へ
 
-          // 見た目のバチバチ演出
+        const now = performance.now();
+        if (now - lastBurstAt > rand(BURST_MIN_MS, BURST_MAX_MS)){
+          p -= burstPow;
+          lastBurstAt = now;
+          // バチバチ演出
           gaugeEl.classList.remove("enemy-throb");
           void gaugeEl.offsetWidth;
           gaugeEl.classList.add("enemy-throb");
         }
 
-        if (p <= 0){ endBattle(false); }
-        else { renderGauge(); }
+        if (p <= 0){
+          endBattle(false); // 敗北
+        }else{
+          renderGauge();
+        }
       }, 16);
 
-      // プレイヤーの連打
-hud.onclick = ()=>{
-  if (!battleActive) return;
-
-  // ★ここを追加：敵にダメージ演出
-  flashHurt(battleTarget);
-
-  // クリックで前線を右へ
-  const push = basePush * (0.9 + Math.random()*0.2);
-  p += push;
-  if (p >= 100){ endBattle(true); }
-  else { renderGauge(); }
-};
-
+      // プレイヤーの連打（青を右へ）
+      hud.onclick = ()=>{
+        if (!battleActive) return;
+        flashHurt(battleTarget); // 被弾フラッシュ
+        const push = PLAYER_PUSH * (0.9 + Math.random()*0.2);
+        p += push;
+        if (p >= 100){
+          endBattle(true);  // 勝利
+        }else{
+          renderGauge();
+        }
+      };
     }
 
-function endBattle(playerWon){
-  battleActive = false;
-  clearInterval(enemyTimer); enemyTimer = null;
-  hudMask.style.display = "none";
-
-  if (!battleTarget || !battleTarget.isConnected){ battleTarget = null; return; }
-
-  if (playerWon){
-    // ★勝利：その瞬間に敵を自然消滅させる（OK待ちにしない）
-    const target = battleTarget;
-    battleTarget = null;
-
-    // 消え方（フェード＋縮小）
-    target.classList.add("vanish");
-    target.addEventListener("animationend", ()=> target?.remove(), { once:true });
-
-    // 勝利パネルは別で表示（背景クリックはブロックのまま）
-    showWin(); // onClose不要。すでに敵は消えている
-  }else{
-    // 敗北：自然に消える
-    battleTarget.classList.add("vanish");
-    battleTarget.addEventListener("animationend", ()=> battleTarget?.remove(), { once:true });
-    battleTarget = null;
-  }
-}
-
-
-    // 勝利表示
-    const winPanel = document.getElementById("winPanel");
-    const winOkBtn = document.getElementById("winOkBtn");
-    const winArt   = document.getElementById("winArt");
-    function showWin(onClose){
-      // 必要なら勝利画像を差し替え：winArt.src = "assets/your_reward.png";
-      winPanel.style.display = "flex";
-      function close(){
-        winPanel.style.display = "none";
-        winOkBtn.removeEventListener("click", close);
-        if (onClose) onClose();
+    function dropLoot(mon, atX, atY){
+      // mon.drops から 1〜2個ランダムでドロップ
+      const count = Math.random() < 0.35 ? 2 : 1;
+      for (let i=0;i<count;i++){
+        const item = pick(mon.drops);
+        const el = document.createElement("div");
+        el.className = "loot";
+        el.textContent = `入手：${item}`;
+        // 表示位置（撃破位置のちょい上）
+        const x = atX + ACTOR_WIDTH/2 - 36 + rand(-14,14);
+        const y = atY - 6 + rand(-6,6);
+        el.style.left = `${x}px`;
+        el.style.top  = `${y}px`;
+        actorsLayer.appendChild(el);
+        setTimeout(()=> el.remove(), 1100);
       }
-      winOkBtn.addEventListener("click", close);
     }
 
-    // 初期スポーン：6体
+    function endBattle(playerWon){
+      battleActive = false;
+      clearInterval(enemyTimer); enemyTimer = null;
+      hudMask.style.display = "none";
+
+      if (!battleTarget || !battleTarget.isConnected){ battleTarget = null; return; }
+
+      const target = battleTarget;
+      battleTarget = null;
+
+      // 勝敗で処理
+      if (playerWon){
+        // ドロップ（撃破座標ベース）
+        const atX = parseFloat(target.style.left) || 0;
+        const atY = parseFloat(target.style.top)  || 0;
+        dropLoot(target.__mon, atX, atY);
+        showToast("キャラをゲット！");
+
+        // その場で自然消滅 → 補充
+        target.classList.add("vanish");
+        target.addEventListener("animationend", ()=>{
+          target.remove();
+          scheduleRespawn();
+        }, { once:true });
+      }else{
+        // 敗北：自然消滅 → 補充
+        target.classList.add("vanish");
+        target.addEventListener("animationend", ()=>{
+          target.remove();
+          scheduleRespawn();
+        }, { once:true });
+      }
+    }
+
+    // ===== 初期スポーン（6体） =====
     for (let i=0;i<MAX_ACTORS;i++) spawnActor();
+
+    // 念のため、定期的に欠員があれば補充（保険）
+    setInterval(()=>{
+      if (!battleActive && countActors() < MAX_ACTORS) scheduleRespawn();
+    }, 3000);
   </script>
 </body>
 </html>
-
-
-
