@@ -6,44 +6,50 @@
   <title>撃破ドロップ＆自動リロード＆多キャラ対応</title>
   <style>
     /* === Inventory UI（TURIと同じ見た目） === */
-.hud{
+/* === Inventory UI（TURI見た目・専用クラス） === */
+.inv-hud{
   position:fixed; right:12px; top:12px; z-index:1300; display:flex; gap:8px;
 }
-.btn{
+.inv-btn{
   background:#0b1c26aa; border:1px solid #7ee0ff66; color:#dff7ff;
   padding:8px 12px; border-radius:10px; backdrop-filter: blur(4px);
   font-weight:600; cursor:pointer;
 }
-.btn:hover{ background:#0f2a36cc; }
+.inv-btn:hover{ background:#0f2a36cc; }
 
-.inv{
+.inv-panel{
   position:fixed; right:12px; top:56px; width:min(420px, calc(100vw - 24px));
   max-height:min(70vh, 520px); overflow:auto; z-index:1250;
   background:#06131bdf; border:1px solid #7ee0ff33; border-radius:12px;
   backdrop-filter: blur(6px); color:#e8fbff; padding:10px 10px 12px;
 }
-.inv h3{ margin:6px 8px 8px; font-size:16px }
-.inv .meta{ margin:0 8px 8px; font-size:12px; opacity:.8 }
-.inv .list{
-  display:grid; grid-template-columns: 1fr auto; gap:6px 10px; padding:6px 8px;
+.inv-panel h3{ margin:6px 8px 8px; font-size:16px }
+.inv-meta{ margin:0 8px 8px; font-size:12px; opacity:.8 }
+.inv-list{ display:grid; grid-template-columns: 1fr auto; gap:6px 10px; padding:6px 8px; }
+
+.inv-row{ display:contents }
+.inv-name{ white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+.inv-qty{ padding:2px 8px; border-radius:999px; font-size:12px; border:1px solid #ffffff22 }
+.inv-actions{ display:flex; gap:6px; }
+.inv-action{
+  background:#0b1c26aa; border:1px solid #7ee0ff44; color:#dff7ff;
+  padding:4px 8px; border-radius:8px; cursor:pointer;
 }
-.inv .row{ display:contents }
-.inv .name{ white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
-.inv .pill{ padding:2px 8px; border-radius:999px; font-size:12px; border:1px solid #ffffff22 }
-.inv .actions{ display:flex; gap:6px; }
+.inv-action:hover{ background:#0f2a36cc; }
 .hidden{ display:none !important; }
+
 
     /* ===== インベントリUI ===== */
 .top-controls{
   position:fixed; top:12px; right:12px; z-index:1300; display:flex; gap:8px;
 }
-.btn{
+.top-controls .btn{
   padding:10px 14px; border-radius:12px; border:1px solid rgba(0,0,0,0.15);
   background:#ffffffcc; backdrop-filter: blur(6px);
   font:700 14px/1 system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans JP",sans-serif;
   cursor:pointer;
 }
-.btn:active{ transform: translateY(1px); }
+..top-controls .btn:active{ transform: translateY(1px); }
 
 .inventory{
   position:fixed; top:60px; right:12px; width:min(90vw, 320px);
@@ -214,14 +220,14 @@
     </div>
   </div>
   <!-- インベントリ開閉ボタン -->
-<div id="invPanel" class="inv hidden">
+<div id="invPanel" class="inv-panel hidden">
   <h3>インベントリ</h3>
   <div class="meta" id="invMeta">合計 0 個</div>
   <div class="list" id="invList"></div>
 </div>
-<div class="hud">
-  <button id="invBtn" class="btn">🎣 インベントリ</button>
-</div>
+<div class="inv-hud">
+   <button id="invBtn" class="inv-btn">🎣 インベントリ</button>
+ </div>
 
   <script>
     // ===== モンスター定義（ここに種類を増やせる） =====
@@ -314,17 +320,17 @@ function renderInventory(){
   for (const [name, count] of entries){
     // 左列：名前
     const nameCell = document.createElement('div');
-    nameCell.className = 'row name';
+    nameCell.className = 'inv-row inv-name';
     nameCell.textContent = name;
 
     // 右列：数量＋操作
     const actionCell = document.createElement('div');
-    actionCell.className = 'row actions';
+    actionCell.className = 'inv-row inv-actions';
     actionCell.innerHTML = `
-      <span class="pill">× ${count}</span>
-      <button class="btnStore btn">倉庫</button>
-      <button class="btnDrop btn">捨てる</button>
-    `;
+   <span class="inv-qty">× ${count}</span>
+   <button class="btnStore inv-action">倉庫</button>
+   <button class="btnDrop inv-action">捨てる</button>
+ `;
 
     // 倉庫（Firebase があれば保存）
     actionCell.querySelector('.btnStore').addEventListener('click', async ()=>{
@@ -614,5 +620,6 @@ addToInventory(item, 1);
   </script>
 </body>
 </html>
+
 
 
