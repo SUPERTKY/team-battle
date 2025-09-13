@@ -618,8 +618,32 @@ addToInventory(item, 1);
       if (!battleActive && countActors() < MAX_ACTORS) scheduleRespawn();
     }, 3000);
   </script>
+  <!-- Firebase（倉庫保存用） -->
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
+  import { getDatabase, ref, push } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js";
+
+  // ★あなたが使っていた設定
+  const firebaseConfig = {
+    apiKey: "AIzaSyDPe5cSCavq5gHopugdOfQ-9_50cTrqmyk",
+    authDomain: "school-178c2.firebaseapp.com",
+    databaseURL: "https://school-178c2-default-rtdb.europe-west1.firebasedatabase.app",
+    projectId: "school-178c2",
+    storageBucket: "school-178c2.firebasestorage.app",
+    messagingSenderId: "409885673101",
+    appId: "1:409885673101:web:25bf0483547e2d470304c4"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db  = getDatabase(app);
+
+  // 他のスクリプト（インベントリの「倉庫」ボタン）から使えるようにexport
+  window.firebaseDB = { db, ref, push };
+</script>
+
 </body>
 </html>
+
 
 
 
