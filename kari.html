@@ -5,21 +5,29 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>押し合いゲージ（青vs赤）</title>
   <style>
-    .actor{
+/* 置き換え */
+.actor{
   position:absolute; width:144px; height:auto;
   pointer-events:auto; user-select:none; -webkit-user-drag:none;
   filter:drop-shadow(0 4px 8px rgba(0,0,0,0.35));
-  transition: transform 120ms ease, filter 80ms ease; /* ← 追加 */
-  will-change:left, top, transform;
+  transition: transform 120ms ease, filter 80ms ease; /* ← filterもトランジション */
+  will-change:left, top, transform, filter;
 }
 .actor:active{ transform:scale(0.96); }
 
-/* ← このブロックを新規追加：一瞬だけ赤っぽく */
+/* 追記：一瞬だけ赤フラッシュ（オレンジ対策） */
 .actor.hurt{
-  /* 元のドロップシャドウは残しつつ、赤みを強調 */
-  filter: drop-shadow(0 4px 8px rgba(0,0,0,0.35))
-          sepia(1) hue-rotate(-40deg) saturate(6) brightness(1.2);
+  /* グレースケール→セピア→超サチュレート→微調整で“赤”に寄せる */
+  filter:
+    drop-shadow(0 4px 8px rgba(0,0,0,0.35))
+    grayscale(1)
+    sepia(1)
+    saturate(8000%)
+    hue-rotate(-8deg)
+    brightness(1.15)
+    contrast(1.1);
 }
+
 
     html, body { margin:0; height:100%; }
     .stage{
@@ -245,11 +253,13 @@ function scheduleWalk(img){
       redFill.style.width  = (100 - clamped) + "%";
       divider.style.left   = clamped + "%";
     }
-    function flashHurt(img){
+// どこでもOK（startBattleの上あたりに）
+function flashHurt(img){
   if (!img || !img.isConnected) return;
   img.classList.add("hurt");
   setTimeout(()=> img.classList.remove("hurt"), 120); // 0.12秒で戻す
 }
+
 
     function startBattle(targetImg){
       battleActive = true; battleTarget = targetImg; p = 50; renderGauge();
@@ -300,25 +310,32 @@ hud.onclick = ()=>{
 
     }
 
-    function endBattle(playerWon){
-      battleActive = false;
-      clearInterval(enemyTimer); enemyTimer = null;
-      hudMask.style.display = "none";
+function endBattle(playerWon){
+  battleActive = false;
+  clearInterval(enemyTimer); enemyTimer = null;
+  hudMask.style.display = "none";
 
-      if (!battleTarget || !battleTarget.isConnected){ battleTarget = null; return; }
+  if (!battleTarget || !battleTarget.isConnected){ battleTarget = null; return; }
 
-      if (playerWon){
-        showWin(()=>{
-          battleTarget.classList.add("vanish");
-          battleTarget.addEventListener("animationend", ()=> battleTarget?.remove(), { once:true });
-          battleTarget = null;
-        });
-      }else{
-        battleTarget.classList.add("vanish");
-        battleTarget.addEventListener("animationend", ()=> battleTarget?.remove(), { once:true });
-        battleTarget = null;
-      }
-    }
+  if (playerWon){
+    // ★勝利：その瞬間に敵を自然消滅させる（OK待ちにしない）
+    const target = battleTarget;
+    battleTarget = null;
+
+    // 消え方（フェード＋縮小）
+    target.classList.add("vanish");
+    target.addEventListener("animationend", ()=> target?.remove(), { once:true });
+
+    // 勝利パネルは別で表示（背景クリックはブロックのまま）
+    showWin(); // onClose不要。すでに敵は消えている
+  }else{
+    // 敗北：自然に消える
+    battleTarget.classList.add("vanish");
+    battleTarget.addEventListener("animationend", ()=> battleTarget?.remove(), { once:true });
+    battleTarget = null;
+  }
+}
+
 
     // 勝利表示
     const winPanel = document.getElementById("winPanel");
