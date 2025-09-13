@@ -5,6 +5,34 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>撃破ドロップ＆自動リロード＆多キャラ対応</title>
   <style>
+    /* === Inventory UI（TURIと同じ見た目） === */
+.hud{
+  position:fixed; right:12px; top:12px; z-index:1300; display:flex; gap:8px;
+}
+.btn{
+  background:#0b1c26aa; border:1px solid #7ee0ff66; color:#dff7ff;
+  padding:8px 12px; border-radius:10px; backdrop-filter: blur(4px);
+  font-weight:600; cursor:pointer;
+}
+.btn:hover{ background:#0f2a36cc; }
+
+.inv{
+  position:fixed; right:12px; top:56px; width:min(420px, calc(100vw - 24px));
+  max-height:min(70vh, 520px); overflow:auto; z-index:1250;
+  background:#06131bdf; border:1px solid #7ee0ff33; border-radius:12px;
+  backdrop-filter: blur(6px); color:#e8fbff; padding:10px 10px 12px;
+}
+.inv h3{ margin:6px 8px 8px; font-size:16px }
+.inv .meta{ margin:0 8px 8px; font-size:12px; opacity:.8 }
+.inv .list{
+  display:grid; grid-template-columns: 1fr auto; gap:6px 10px; padding:6px 8px;
+}
+.inv .row{ display:contents }
+.inv .name{ white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+.inv .pill{ padding:2px 8px; border-radius:999px; font-size:12px; border:1px solid #ffffff22 }
+.inv .actions{ display:flex; gap:6px; }
+.hidden{ display:none !important; }
+
     /* ===== インベントリUI ===== */
 .top-controls{
   position:fixed; top:12px; right:12px; z-index:1300; display:flex; gap:8px;
@@ -186,17 +214,13 @@
     </div>
   </div>
   <!-- インベントリ開閉ボタン -->
-<div class="top-controls">
-  <button class="btn" id="invToggle">🎒 インベントリ <span class="inv-total" id="invTotal">(0)</span></button>
+<div id="invPanel" class="inv hidden">
+  <h3>インベントリ</h3>
+  <div class="meta" id="invMeta">合計 0 個</div>
+  <div class="list" id="invList"></div>
 </div>
-
-<!-- インベントリパネル -->
-<div class="inventory" id="inventory">
-  <div class="inv-header">
-    <span style="font-weight:800">インベントリ</span>
-    <span class="inv-total" id="invTotal2">0個</span>
-  </div>
-  <div class="inv-list" id="invList"></div>
+<div class="hud">
+  <button id="invBtn" class="btn">🎣 インベントリ</button>
 </div>
 
   <script>
@@ -240,62 +264,112 @@
     const gaugeEl  = document.getElementById("gauge");
     const enemyNameLbl = document.getElementById("enemyNameLbl");
 // ===== インベントリ =====
-const INV_KEY = "inventory_v1";
-let inventory = {}; // { アイテム名: 個数 }
+// ===== インベントリ（TURI見た目） =====
+const INV_KEY = 'inventory_v1';
+// 保持形式：{ total:number, byItem:{ [name]: qty } }
+let inv = loadInv();
 
-const invToggle = document.getElementById("invToggle");
-const invPanel  = document.getElementById("inventory");
-const invList   = document.getElementById("invList");
-const invTotal  = document.getElementById("invTotal");
-const invTotal2 = document.getElementById("invTotal2");
+const invPanel = document.getElementById('invPanel');
+const invBtn   = document.getElementById('invBtn');
+const invMeta  = document.getElementById('invMeta');
+const invList  = document.getElementById('invList');
 
-function loadInventory(){
+function loadInv(){
   try{
     const raw = localStorage.getItem(INV_KEY);
-    inventory = raw ? JSON.parse(raw) : {};
-  }catch(e){ inventory = {}; }
+    const obj = raw ? JSON.parse(raw) : {};
+    // 旧形式（{名前:個数}）→ 新形式に自動変換
+    if (!('total' in obj) || !('byItem' in obj)){
+      const byItem = obj && typeof obj === 'object' ? obj : {};
+      const total = Object.values(byItem).reduce((a,b)=> a+(b||0), 0);
+      const neo = { total, byItem };
+      localStorage.setItem(INV_KEY, JSON.stringify(neo));
+      return neo;
+    }
+    return obj;
+  }catch(_){
+    return { total:0, byItem:{} };
+  }
 }
-function saveInventory(){
-  try{ localStorage.setItem(INV_KEY, JSON.stringify(inventory)); }catch(e){}
-}
-function getInvTotal(){
-  return Object.values(inventory).reduce((a,b)=> a + (b||0), 0);
-}
-function renderInventory(){
-  invList.innerHTML = "";
-  Object.entries(inventory).forEach(([name, qty])=>{
-    const row = document.createElement("div");
-    row.className = "inv-item";
-    row.innerHTML = `
-      <div class="inv-name">${name}</div>
-      <div class="inv-qty">× ${qty}</div>
-    `;
-    invList.appendChild(row);
-  });
-  const total = getInvTotal();
-  invTotal.textContent  = `(${total})`;
-  invTotal2.textContent = `${total}個`;
-}
-function bumpTotal(){
-  invTotal.classList.add("pulse");
-  invTotal2.classList.add("pulse");
-  setTimeout(()=>{ invTotal.classList.remove("pulse"); invTotal2.classList.remove("pulse"); }, 420);
-}
+function saveInv(){ try{ localStorage.setItem(INV_KEY, JSON.stringify(inv)); }catch(_){} }
+
+// 既存の dropLoot から呼ばれる想定
 function addToInventory(name, qty=1){
-  inventory[name] = (inventory[name]||0) + qty;
-  saveInventory();
+  inv.total += qty;
+  inv.byItem[name] = (inv.byItem[name]||0) + qty;
+  saveInv();
   renderInventory();
-  bumpTotal();
+  if (typeof showToast === 'function'){
+    showToast(`+${qty} ${name} を入手（合計 ${inv.byItem[name]}）`);
+  }
+}
+
+function renderInventory(){
+  if(!invMeta || !invList) return;
+  invMeta.textContent = `合計 ${inv.total} 個`;
+
+  const entries = Object.entries(inv.byItem).sort((a,b)=> a[0].localeCompare(b[0],'ja'));
+  invList.innerHTML = '';
+
+  for (const [name, count] of entries){
+    // 左列：名前
+    const nameCell = document.createElement('div');
+    nameCell.className = 'row name';
+    nameCell.textContent = name;
+
+    // 右列：数量＋操作
+    const actionCell = document.createElement('div');
+    actionCell.className = 'row actions';
+    actionCell.innerHTML = `
+      <span class="pill">× ${count}</span>
+      <button class="btnStore btn">倉庫</button>
+      <button class="btnDrop btn">捨てる</button>
+    `;
+
+    // 倉庫（Firebase があれば保存）
+    actionCell.querySelector('.btnStore').addEventListener('click', async ()=>{
+      try{
+        const api = window.firebaseDB;
+        if(!api) throw new Error('no-firebase');
+        const { db, ref, push } = api;
+        const dbRef = ref(db, 'warehouse/team1');
+        await push(dbRef, { item:name, count:1, ts:Date.now() });
+
+        // 在庫を1つ減らす
+        if (inv.byItem[name]){
+          inv.total--;
+          if (--inv.byItem[name] <= 0) delete inv.byItem[name];
+          saveInv(); renderInventory();
+          showToast?.(`${name} を倉庫にしまいました`);
+        }
+      }catch(e){
+        showToast?.('倉庫にしまうには Firebase の設定が必要です');
+      }
+    });
+
+    // 捨てる
+    actionCell.querySelector('.btnDrop').addEventListener('click', ()=>{
+      if (inv.byItem[name]){
+        inv.total--;
+        if (--inv.byItem[name] <= 0) delete inv.byItem[name];
+        saveInv(); renderInventory();
+        showToast?.(`${name} を捨てました`);
+      }
+    });
+
+    invList.appendChild(nameCell);
+    invList.appendChild(actionCell);
+  }
 }
 
 // 開閉
-invToggle?.addEventListener("click", ()=>{
-  invPanel.classList.toggle("open");
+invBtn?.addEventListener('click', ()=>{
+  invPanel.classList.toggle('hidden');
 });
 
-// 初期ロード
-loadInventory();
+// 初期描画
 renderInventory();
+
 
     // ===== 共通ユーティリティ =====
     function rand(min,max){ return Math.random()*(max-min)+min; }
@@ -540,4 +614,5 @@ addToInventory(item, 1);
   </script>
 </body>
 </html>
+
 
