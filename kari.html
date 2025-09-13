@@ -164,12 +164,20 @@
       });
     }
 
-    function scheduleWalk(img){
-      setTimeout(()=>{
-        if (!img.isConnected || battleActive) return;
-        walkToRandom(img, ()=> scheduleWalk(img));
-      }, rand(1000,4000));
+// 置き換え版：バトル中はポーリングして再トライ
+function scheduleWalk(img){
+  const rest = rand(1000, 4000); // 1〜4秒休憩
+  setTimeout(function tryStart(){
+    if (!img.isConnected) return;      // 既に消えてたら終了
+    if (battleActive){                  // バトル中は待って再トライ
+      setTimeout(tryStart, 400);        // ← 0.4秒ごとに再確認
+      return;
     }
+    // バトルが終わっていたら歩行開始
+    walkToRandom(img, ()=>{ scheduleWalk(img); });
+  }, rest);
+}
+
 
     function walkToRandom(img, onFinish){
       const rect = actorsLayer.getBoundingClientRect();
@@ -306,4 +314,5 @@ const burstMax  = 620;
   </script>
 </body>
 </html>
+
 
