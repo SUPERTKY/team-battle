@@ -5,6 +5,22 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>押し合いゲージ（青vs赤）</title>
   <style>
+    .actor{
+  position:absolute; width:144px; height:auto;
+  pointer-events:auto; user-select:none; -webkit-user-drag:none;
+  filter:drop-shadow(0 4px 8px rgba(0,0,0,0.35));
+  transition: transform 120ms ease, filter 80ms ease; /* ← 追加 */
+  will-change:left, top, transform;
+}
+.actor:active{ transform:scale(0.96); }
+
+/* ← このブロックを新規追加：一瞬だけ赤っぽく */
+.actor.hurt{
+  /* 元のドロップシャドウは残しつつ、赤みを強調 */
+  filter: drop-shadow(0 4px 8px rgba(0,0,0,0.35))
+          sepia(1) hue-rotate(-40deg) saturate(6) brightness(1.2);
+}
+
     html, body { margin:0; height:100%; }
     .stage{
       position:relative; width:100vw; height:100vh; overflow:hidden;
@@ -229,6 +245,11 @@ function scheduleWalk(img){
       redFill.style.width  = (100 - clamped) + "%";
       divider.style.left   = clamped + "%";
     }
+    function flashHurt(img){
+  if (!img || !img.isConnected) return;
+  img.classList.add("hurt");
+  setTimeout(()=> img.classList.remove("hurt"), 120); // 0.12秒で戻す
+}
 
     function startBattle(targetImg){
       battleActive = true; battleTarget = targetImg; p = 50; renderGauge();
@@ -264,14 +285,19 @@ const burstMax  = 620;
       }, 16);
 
       // プレイヤーの連打
-      hud.onclick = ()=>{
-        if (!battleActive) return;
-        // クリックごとに右へ押す（少しブレを入れて手ごたえ）
-        const push = basePush * (0.9 + Math.random()*0.2);
-        p += push;
-        if (p >= 100){ endBattle(true); }
-        else { renderGauge(); }
-      };
+hud.onclick = ()=>{
+  if (!battleActive) return;
+
+  // ★ここを追加：敵にダメージ演出
+  flashHurt(battleTarget);
+
+  // クリックで前線を右へ
+  const push = basePush * (0.9 + Math.random()*0.2);
+  p += push;
+  if (p >= 100){ endBattle(true); }
+  else { renderGauge(); }
+};
+
     }
 
     function endBattle(playerWon){
@@ -314,5 +340,6 @@ const burstMax  = 620;
   </script>
 </body>
 </html>
+
 
 
