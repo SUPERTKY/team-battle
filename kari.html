@@ -227,10 +227,13 @@
       hudMask.style.display = "flex";
 
       // === 難易度調整（敵を弱めた） ===
-      const basePush  = 0.18;  // プレイヤー1クリックで進む%（0.15〜0.22くらい）
-      const enemyBase = 0.30/60; // 敵の常時押し（毎秒0.30%）
-      const burstPow  = 2.0;   // 敵バースト1回の%（以前より小さめ）
-      const burstMin = 280, burstMax = 520; // バースト間隔（敵の“押してる感”を残しつつ弱め）
+// --- startBattle 内（定義する数値だけ差し替え） ---
+const basePush  = 3.2;     // ★プレイヤー1クリックで +3.2% 進む
+const enemyBase = 0.40/60; // ★敵の常時押し：毎秒 0.40%（= 0.0067/フレーム）
+const burstPow  = 1.6;     // ★敵のバースト1回で -1.6%
+const burstMin  = 320;     // ★敵バースト間隔（やや遅め）
+const burstMax  = 620;
+
 
       // 敵の押し（60fps想定）
       let lastBurstAt = performance.now();
@@ -303,3 +306,4 @@
   </script>
 </body>
 </html>
+
