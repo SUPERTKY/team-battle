@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>背景と下の四角</title>
+  <style>
+    html, body {
+      margin: 0;
+      height: 100%;
+    }
+
+    /* 背景 */
+    .stage {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      background: url("assets/sougen.jpg") no-repeat center center;
+      background-size: cover;
+      overflow: hidden;
+    }
+
+    /* 下の四角（背景とは別） */
+    .bottom-rect {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      height: 33.33vh; /* 全体の1/3 */
+      background: rgba(255, 255, 255, 0.9); /* 白＋透明度 */
+      border-top: 1px solid rgba(0, 0, 0, 0.1);
+      box-shadow: 0 -8px 20px rgba(0, 0, 0, 0.25);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .content {
+      font: 600 20px/1.4 system-ui, "Segoe UI", Roboto, sans-serif;
+      color: #111827;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="stage">
+    <!-- 下の四角 -->
+    <div class="bottom-rect">
+      <div class="content">
+        背景とは別の四角（高さ：全体の1/3）
+      </div>
+    </div>
+  </div>
+</body>
+</html>
