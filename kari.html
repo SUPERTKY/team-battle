@@ -5,6 +5,47 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>撃破ドロップ＆自動リロード＆多キャラ対応</title>
   <style>
+    /* ===== インベントリUI ===== */
+.top-controls{
+  position:fixed; top:12px; right:12px; z-index:1300; display:flex; gap:8px;
+}
+.btn{
+  padding:10px 14px; border-radius:12px; border:1px solid rgba(0,0,0,0.15);
+  background:#ffffffcc; backdrop-filter: blur(6px);
+  font:700 14px/1 system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans JP",sans-serif;
+  cursor:pointer;
+}
+.btn:active{ transform: translateY(1px); }
+
+.inventory{
+  position:fixed; top:60px; right:12px; width:min(90vw, 320px);
+  max-height:70vh; overflow:auto; z-index:1250;
+  background:#0b1020ee; color:#e5e7eb; border:1px solid rgba(255,255,255,0.12);
+  border-radius:14px; box-shadow:0 16px 40px rgba(0,0,0,0.45);
+  transform: translateX(120%); transition: transform 220ms ease;
+}
+.inventory.open{ transform: translateX(0); }
+.inv-header{
+  display:flex; align-items:center; justify-content:space-between;
+  padding:12px 14px; border-bottom:1px solid rgba(255,255,255,0.08);
+  position:sticky; top:0; background:inherit; z-index:1;
+}
+.inv-list{ padding:10px 12px 14px; }
+.inv-item{
+  display:grid; grid-template-columns: 1fr auto; align-items:center;
+  gap:8px; padding:8px 10px; border-radius:10px;
+  background:#0f172ae6; border:1px solid rgba(255,255,255,0.06);
+  margin-bottom:8px;
+}
+.inv-name{ font-weight:700; }
+.inv-qty{ font-weight:800; }
+.inv-total.pulse{ animation: invpulse 420ms ease; }
+@keyframes invpulse{
+  0%{ transform:scale(1); }
+  40%{ transform:scale(1.15); }
+  100%{ transform:scale(1); }
+}
+
     html, body { margin:0; height:100%; }
     .stage{
       position:relative; width:100vw; height:100vh; overflow:hidden;
@@ -144,6 +185,19 @@
       <div class="tap-hint">このパネルを連打！ 押し切れば勝ち（撃破と同時にドロップ）</div>
     </div>
   </div>
+  <!-- インベントリ開閉ボタン -->
+<div class="top-controls">
+  <button class="btn" id="invToggle">🎒 インベントリ <span class="inv-total" id="invTotal">(0)</span></button>
+</div>
+
+<!-- インベントリパネル -->
+<div class="inventory" id="inventory">
+  <div class="inv-header">
+    <span style="font-weight:800">インベントリ</span>
+    <span class="inv-total" id="invTotal2">0個</span>
+  </div>
+  <div class="inv-list" id="invList"></div>
+</div>
 
   <script>
     // ===== モンスター定義（ここに種類を増やせる） =====
@@ -185,6 +239,63 @@
     const divider  = document.getElementById("divider");
     const gaugeEl  = document.getElementById("gauge");
     const enemyNameLbl = document.getElementById("enemyNameLbl");
+// ===== インベントリ =====
+const INV_KEY = "inventory_v1";
+let inventory = {}; // { アイテム名: 個数 }
+
+const invToggle = document.getElementById("invToggle");
+const invPanel  = document.getElementById("inventory");
+const invList   = document.getElementById("invList");
+const invTotal  = document.getElementById("invTotal");
+const invTotal2 = document.getElementById("invTotal2");
+
+function loadInventory(){
+  try{
+    const raw = localStorage.getItem(INV_KEY);
+    inventory = raw ? JSON.parse(raw) : {};
+  }catch(e){ inventory = {}; }
+}
+function saveInventory(){
+  try{ localStorage.setItem(INV_KEY, JSON.stringify(inventory)); }catch(e){}
+}
+function getInvTotal(){
+  return Object.values(inventory).reduce((a,b)=> a + (b||0), 0);
+}
+function renderInventory(){
+  invList.innerHTML = "";
+  Object.entries(inventory).forEach(([name, qty])=>{
+    const row = document.createElement("div");
+    row.className = "inv-item";
+    row.innerHTML = `
+      <div class="inv-name">${name}</div>
+      <div class="inv-qty">× ${qty}</div>
+    `;
+    invList.appendChild(row);
+  });
+  const total = getInvTotal();
+  invTotal.textContent  = `(${total})`;
+  invTotal2.textContent = `${total}個`;
+}
+function bumpTotal(){
+  invTotal.classList.add("pulse");
+  invTotal2.classList.add("pulse");
+  setTimeout(()=>{ invTotal.classList.remove("pulse"); invTotal2.classList.remove("pulse"); }, 420);
+}
+function addToInventory(name, qty=1){
+  inventory[name] = (inventory[name]||0) + qty;
+  saveInventory();
+  renderInventory();
+  bumpTotal();
+}
+
+// 開閉
+invToggle?.addEventListener("click", ()=>{
+  invPanel.classList.toggle("open");
+});
+
+// 初期ロード
+loadInventory();
+renderInventory();
 
     // ===== 共通ユーティリティ =====
     function rand(min,max){ return Math.random()*(max-min)+min; }
@@ -370,6 +481,9 @@
       for (let i=0;i<count;i++){
         const item = pick(mon.drops);
         const el = document.createElement("div");
+        // 既存の for ループ内、item を決めた直後に追加
+addToInventory(item, 1);
+
         el.className = "loot";
         el.textContent = `入手：${item}`;
         // 表示位置（撃破位置のちょい上）
@@ -426,3 +540,4 @@
   </script>
 </body>
 </html>
+
