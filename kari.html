@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>重なり順：下ほど前面</title>
+  <title>連打ゲージバトル付きスライム</title>
   <style>
     html, body { margin:0; height:100%; }
     .stage{
@@ -11,12 +11,14 @@
       background: url("assets/sougen.png") center/cover no-repeat;
     }
 
+    /* 移動範囲（透明） */
     .bottom-rect{
       position:absolute; left:0; right:0; bottom:0;
       height:44.44vh; background: transparent;
       pointer-events:none; z-index:10;
     }
 
+    /* キャラレイヤ（透明四角と同サイズ） */
     .actors-layer{
       position:absolute; left:0; right:0; bottom:0; height:44.44vh;
       pointer-events:none; z-index:20;
@@ -30,12 +32,130 @@
       will-change: left, top, transform;
     }
     .actor:active{ transform:scale(0.96); }
+
+    /* 消え方：自然にフェード＋縮小＋落下少し */
+    @keyframes vanish {
+      0%   { opacity:1; transform: translateY(0)   scale(1)    }
+      60%  { opacity:.6; transform: translateY(6px) scale(.9)  }
+      100% { opacity:0; transform: translateY(12px) scale(.75) }
+    }
+    .vanish { animation: vanish 380ms ease forwards; }
+
+    /* ==== バトルUI ==== */
+    .hud-mask{
+      position:fixed; inset:0; background: rgba(0,0,0,0.3);
+      display:none; align-items:center; justify-content:center;
+      z-index: 1000; /* 俯瞰で最前面 */
+      backdrop-filter: blur(2px);
+    }
+    .hud{
+      width:min(92vw, 720px);
+      background: #0b1020ee;
+      border:1px solid rgba(255,255,255,0.1);
+      border-radius: 14px;
+      padding:16px 18px 20px;
+      box-shadow: 0 20px 50px rgba(0,0,0,0.45);
+      color:#e5e7eb;
+      font: 600 14px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans JP", sans-serif;
+      user-select:none;
+    }
+    .hud-title{
+      display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;
+      font-weight:700;
+    }
+    .vs-row{
+      display:flex; gap:10px; align-items:center; justify-content:space-between; margin-bottom:10px;
+      font-size:13px; opacity:.9;
+    }
+    .gauge{
+      position:relative; height:26px; border-radius:999px;
+      background:#0a0f1a; border:1px solid rgba(255,255,255,0.08);
+      overflow:hidden;
+    }
+    .gauge .fill-left{
+      position:absolute; left:50%; top:0; bottom:0; width:0%;
+      background: linear-gradient(90deg,#22c55e,#84cc16);
+      transition: width 50ms linear, left 50ms linear;
+    }
+    .gauge .fill-right{
+      position:absolute; right:50%; top:0; bottom:0; width:0%;
+      background: linear-gradient(90deg,#ef4444,#f59e0b);
+      transition: width 50ms linear, right 50ms linear;
+    }
+    .gauge .tick{
+      position:absolute; left:50%; top:0; bottom:0; width:2px; background:#ffffff22;
+    }
+    .tap-hint{
+      margin-top:8px; text-align:center; font-size:12px; opacity:.85;
+    }
+    .enemy-throb{
+      box-shadow: inset 0 0 0 0 rgba(255,255,255,0);
+      animation: throb 140ms ease;
+    }
+    @keyframes throb{
+      0%{ box-shadow: inset 0 0 0 0 rgba(255,255,255,0.0);}
+      50%{ box-shadow: inset 0 0 28px 0 rgba(255,255,255,0.15);}
+      100%{ box-shadow: inset 0 0 0 0 rgba(255,255,255,0.0);}
+    }
+
+    /* 勝利表示 */
+    .win-panel{
+      position:fixed; inset:0; display:none; align-items:center; justify-content:center;
+      z-index:1100; background: rgba(0,0,0,0.55); backdrop-filter: blur(2px);
+    }
+    .win-card{
+      width:min(92vw,700px); background:#0b1020f0; color:#fff;
+      border:1px solid rgba(255,255,255,0.12); border-radius:16px;
+      box-shadow:0 25px 60px rgba(0,0,0,0.55);
+      padding:16px; text-align:center;
+    }
+    .win-card h2{ margin:8px 0 12px; font-size:22px; }
+    .win-art{
+      display:block; margin:0 auto 10px; max-width:100%; height:auto;
+      filter: drop-shadow(0 10px 24px rgba(0,0,0,0.45));
+    }
+    .win-actions{ margin-top:10px; }
+    .btn{
+      padding:10px 16px; border-radius:12px; border:1px solid rgba(255,255,255,0.15);
+      background:#1f2937; color:#fff; cursor:pointer; font-weight:700;
+    }
+    .btn:hover{ filter:brightness(1.05); }
   </style>
 </head>
 <body>
   <div class="stage">
     <div class="bottom-rect"></div>
     <div class="actors-layer" id="actorsLayer"></div>
+  </div>
+
+  <!-- バトルHUD（連打ゲージ） -->
+  <div class="hud-mask" id="hudMask">
+    <div class="hud" id="hud">
+      <div class="hud-title">
+        <span>バトル中…連打で押し勝て！</span>
+        <span id="timerLbl"></span>
+      </div>
+      <div class="vs-row">
+        <span>あなた</span><span>VS</span><span>スライム</span>
+      </div>
+      <div class="gauge" id="gauge">
+        <div class="fill-left"  id="fillLeft"></div>
+        <div class="fill-right" id="fillRight"></div>
+        <div class="tick"></div>
+      </div>
+      <div class="tap-hint">（このパネル上を連打！ 連打中は他の操作不可）</div>
+    </div>
+  </div>
+
+  <!-- 勝利表示 -->
+  <div class="win-panel" id="winPanel">
+    <div class="win-card">
+      <img class="win-art" id="winArt" src="assets/get_banner.png" alt="get!" />
+      <h2>キャラをゲット！</h2>
+      <div class="win-actions">
+        <button class="btn" id="winOkBtn">OK</button>
+      </div>
+    </div>
   </div>
 
   <script>
@@ -46,19 +166,18 @@
     const ACTOR_WIDTH = 144;
     const ACTOR_HEIGHT = 144;
 
-    const WALK_FRAME_MS = 200;  // 歩行中の2フレ切替
+    const WALK_FRAME_MS = 200;  // 歩行アニメ切替
     const WALK_SPEED = 60;      // px/s
 
     const actorsLayer = document.getElementById("actorsLayer");
 
-    function rand(min,max){ return Math.random()*(max-min)+min; }
-
-    // 下にいるほど前面に：Y座標から z-index を決める
+    // ====== 重なり順（下ほど前面） ======
     function updateDepth(img){
       const y = parseFloat(img.style.top) || 0;
-      // 1000を基準に、Yが大きい(下)ほど z-index を高く
       img.style.zIndex = String(1000 + Math.floor(y));
     }
+
+    function rand(min,max){ return Math.random()*(max-min)+min; }
 
     function spawnActor(){
       const rect = actorsLayer.getBoundingClientRect();
@@ -73,21 +192,26 @@
       img.className="actor";
       img.style.left=`${x}px`;
       img.style.top =`${y}px`;
-      img.style.transform = "scaleX(1)"; // デフォ左向き
-
+      img.style.transform = "scaleX(1)";
       actorsLayer.appendChild(img);
-      updateDepth(img);          // 生成時にも反映
+      updateDepth(img);
+
+      // 歩行ループ
       scheduleWalk(img);
 
-      // クリックで削除
-      img.addEventListener("click", ()=> img.remove());
+      // クリック → バトル開始（他は触れない）
+      img.addEventListener("click", (e)=>{
+        e.stopPropagation();
+        if (battleActive) return;
+        startBattle(img);
+      });
     }
 
     function scheduleWalk(img){
       setTimeout(()=>{
-        if (!img.isConnected) return;
+        if (!img.isConnected || battleActive) return;
         walkToRandom(img, ()=> scheduleWalk(img));
-      }, rand(1000,4000)); // 1〜4秒休憩
+      }, rand(1000,4000));
     }
 
     function walkToRandom(img, onFinish){
@@ -105,10 +229,9 @@
       const distance = Math.hypot(dx,dy);
       const duration = distance / WALK_SPEED * 1000;
 
-      // 向き決定（右へ行くときは反転）
+      // 向き：右へ行く時は反転
       img.style.transform = (dx > 0) ? "scaleX(-1)" : "scaleX(1)";
 
-      // 歩行アニメ（歩く間だけ）
       let startTime=null;
       let toggle=false;
       const frameTimer=setInterval(()=>{
@@ -122,24 +245,155 @@
         if (t>=1){
           img.style.left=`${targetX}px`;
           img.style.top =`${targetY}px`;
-          updateDepth(img);      // 到着時にも更新
+          updateDepth(img);
           clearInterval(frameTimer);
-          img.src=FRAME1_SRC;    // 静止
+          img.src=FRAME1_SRC;
           if(onFinish) onFinish();
           return;
         }
         img.style.left=`${startX+dx*t}px`;
         img.style.top =`${startY+dy*t}px`;
-        updateDepth(img);        // 移動中も毎フレ更新
+        updateDepth(img);
         requestAnimationFrame(step);
       }
       requestAnimationFrame(step);
     }
 
-    // 最初から6体スポーン
+    // ====== バトル：連打ゲージの押し合い ======
+    let battleActive = false;
+    let battleTarget = null;
+    let enemyTimer = null;
+    let gaugeVal = 0; // -1（あなた勝ち）〜 +1（敵勝ち）
+    const hudMask   = document.getElementById("hudMask");
+    const hud       = document.getElementById("hud");
+    const fillLeft  = document.getElementById("fillLeft");
+    const fillRight = document.getElementById("fillRight");
+    const timerLbl  = document.getElementById("timerLbl");
+
+    function renderGauge(){
+      // gaugeVal<0 で左が伸びる、>0 で右が伸びる
+      const v = Math.max(-1, Math.min(1, gaugeVal));
+      if (v <= 0){
+        const pct = Math.abs(v)*100;
+        fillLeft.style.left = `${50 - pct/2}%`;
+        fillLeft.style.width= `${pct}%`;
+        fillRight.style.right = `50%`;
+        fillRight.style.width = `0%`;
+      }else{
+        const pct = v*100;
+        fillRight.style.right = `${50 - pct/2}%`;
+        fillRight.style.width = `${pct}%`;
+        fillLeft.style.left = `50%`;
+        fillLeft.style.width= `0%`;
+      }
+    }
+
+    function startBattle(targetImg){
+      battleActive = true;
+      battleTarget = targetImg;
+      gaugeVal = 0;
+      renderGauge();
+
+      // 画面操作をHUDでブロック
+      hudMask.style.display = "flex";
+
+      // 敵の“クリックしてる感”：
+      // ランダムな間隔でドカッと押す＋ベースの押し（毎フレ軽く）
+      const basePush = 0.007;       // 常時押し
+      const burstMin = 120;         // バースト間隔 ms
+      const burstMax = 320;
+      const burstPow = 0.12;        // バースト強度
+
+      // 敵タイマー（約60fps想定）
+      let lastBurstAt = performance.now();
+      enemyTimer = setInterval(()=>{
+        if (!battleActive) return;
+        gaugeVal += basePush;
+
+        const now = performance.now();
+        if (now - lastBurstAt > rand(burstMin, burstMax)){
+          gaugeVal += burstPow * (0.7 + Math.random()*0.6); // ちょい変動
+          lastBurstAt = now;
+          // 見た目の“押した感”
+          document.getElementById("gauge").classList.remove("enemy-throb");
+          // リフレッシュのため強制再flow
+          void document.getElementById("gauge").offsetWidth;
+          document.getElementById("gauge").classList.add("enemy-throb");
+        }
+
+        // 結果判定
+        if (gaugeVal >= 1){
+          endBattle(false); // あなたの負け
+        }else{
+          renderGauge();
+        }
+      }, 16);
+
+      // プレイヤーの連打：HUD内どこでもOK
+      hud.onclick = ()=>{
+        if (!battleActive) return;
+        // クリック一発の押し量。少しブレを入れて手触りUP
+        const push = 0.085 + Math.random()*0.025;
+        gaugeVal -= push;
+        if (gaugeVal <= -1){
+          endBattle(true); // 勝ち
+        }else{
+          renderGauge();
+        }
+      };
+
+      timerLbl.textContent = "連打で対抗！";
+    }
+
+    function endBattle(playerWon){
+      battleActive = false;
+      clearInterval(enemyTimer);
+      enemyTimer = null;
+      hudMask.style.display = "none";
+
+      if (!battleTarget || !battleTarget.isConnected){
+        battleTarget = null; return;
+      }
+
+      if (playerWon){
+        // 勝利：勝利表示 → OKで対象を消して狩り再開
+        showWin(() => {
+          battleTarget.classList.add("vanish");
+          battleTarget.addEventListener("animationend", ()=> battleTarget?.remove(), { once:true });
+          battleTarget = null;
+        });
+      }else{
+        // 敗北：自然に消える
+        battleTarget.classList.add("vanish");
+        battleTarget.addEventListener("animationend", ()=> battleTarget?.remove(), { once:true });
+        battleTarget = null;
+      }
+    }
+
+    // ====== 勝利表示 ======
+    const winPanel = document.getElementById("winPanel");
+    const winOkBtn = document.getElementById("winOkBtn");
+    const winArt   = document.getElementById("winArt");
+
+    function showWin(onClose){
+      // ここで任意に画像を差し替え可（例：倒したキャラの拡大やご褒美画像）
+      // winArt.src = "assets/your_reward.png";
+      winPanel.style.display = "flex";
+      function close(){
+        winPanel.style.display = "none";
+        winOkBtn.removeEventListener("click", close);
+        if (onClose) onClose();
+      }
+      winOkBtn.addEventListener("click", close);
+    }
+
+    // ====== 初期スポーン：6体 ======
     for (let i=0;i<MAX_ACTORS;i++){
       spawnActor();
     }
+
+    // 画面サイズ変更しても既存配置は維持（必要なら再配置ロジックを追加）
+    window.addEventListener("resize", ()=>{ /* no-op */ });
   </script>
 </body>
 </html>
