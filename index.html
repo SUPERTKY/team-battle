@@ -3,341 +3,53 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>メニュー</title>
-  <!-- お好みでGoogle Fonts（外せます） -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;700&display=swap" rel="stylesheet">
+  <title>背景と下の四角</title>
   <style>
-    .hidden { display:none !important; }
-
-    :root{
-      --bg1:#1a2a6c;
-      --bg2:#b21f1f;
-      --bg3:#fdbb2d;
-      --card-bg: rgba(255,255,255,.08);
-      --border: rgba(255,255,255,.18);
-      --text: #ffffff;
-      --accent: #ffffff;
-      --shadow: 0 10px 30px rgba(0,0,0,.25);
-    }
-    @media (prefers-color-scheme: light){
-      :root{
-        --card-bg: rgba(255,255,255,.7);
-        --border: rgba(0,0,0,.08);
-        --text: #111827;
-        --accent: #111827;
-      }
-    }
-    *{box-sizing:border-box}
-    html,body{
-      height:100%;
-      margin:0;
-      color:var(--text);
-      font-family: system-ui, -apple-system, Segoe UI, Roboto, "Poppins", sans-serif;
-      background: linear-gradient(135deg, var(--bg1), var(--bg2) 55%, var(--bg3));
-      background-attachment: fixed;
-    }
-    .wrap{
-      min-height:100%;
-      display:grid;
-      place-items:center;
-      padding:32px;
-    }
-    .card{
-      width:min(960px, 92vw);
-      background: var(--card-bg);
-      border:1px solid var(--border);
-      border-radius:24px;
-      box-shadow: var(--shadow);
-      backdrop-filter: blur(16px);
-      -webkit-backdrop-filter: blur(16px);
-      padding: clamp(20px, 4vw, 36px);
-      animation: pop .6s ease both;
-    }
-    @keyframes pop {
-      from { transform: translateY(12px) scale(.98); opacity:0; }
-      to   { transform: translateY(0) scale(1); opacity:1; }
-    }
-    .title{
-      font-weight:700;
-      letter-spacing:.02em;
-      font-size: clamp(22px, 2.4vw, 32px);
-      margin: 0 0 14px;
-    }
-    .sub{
-      opacity:.9;
-      margin:0 0 22px;
-      font-size: clamp(13px, 1.5vw, 15px);
+    html, body {
+      margin: 0;
+      height: 100%;
     }
 
-    .grid{
-      display:grid;
-      grid-template-columns: repeat(3, minmax(0,1fr));
-      gap: clamp(12px, 2.2vw, 20px);
-    }
-    @media (max-width:760px){
-      .grid{ grid-template-columns: 1fr; }
-    }
-    .btn{
-      position:relative;
-      display:flex;
-      align-items:center;
-      gap:14px;
-      padding:18px 18px;
-      border-radius:18px;
-      text-decoration:none;
-      color: var(--text);
-      background: rgba(255,255,255,.08);
-      border:1px solid var(--border);
-      transition: transform .18s ease, box-shadow .18s ease, background .18s ease;
-      box-shadow: 0 8px 18px rgba(0,0,0,.18);
-      overflow:hidden;
-      isolation:isolate;
-    }
-    .btn:hover, .btn:focus-visible{
-      transform: translateY(-3px);
-      box-shadow: 0 16px 34px rgba(0,0,0,.28);
-      background: rgba(255,255,255,.14);
-      outline: none;
-    }
-    .btn:active{ transform: translateY(-1px) scale(.995); }
-    .icon{
-      width:42px; height:42px; flex:0 0 42px;
-      display:grid; place-items:center;
-      font-size:22px; border-radius:12px;
-      background: rgba(255,255,255,.12);
-      border:1px solid var(--border);
-    }
-    .label{
-      display:flex; flex-direction:column; gap:6px; min-width:0;
-    }
-    .label .name{
-      font-weight:700;
-      letter-spacing:.01em;
-      font-size: clamp(16px, 1.8vw, 18px);
-      white-space: nowrap; overflow:hidden; text-overflow: ellipsis;
-    }
-    .label .desc{
-      font-size: 13px; opacity:.85;
-      white-space: nowrap; overflow:hidden; text-overflow: ellipsis;
-    }
-    .kbd{
-      margin-left:auto;
-      font: 600 11px ui-monospace, SFMono-Regular, Menlo, monospace;
-      padding:6px 8px; border-radius:8px;
-      border:1px solid var(--border);
-      background: rgba(255,255,255,.08);
-      opacity:.9;
+    /* 背景 */
+    .stage {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      background: url("assets/sougen.png") no-repeat center center;
+      background-size: cover;
+      overflow: hidden;
     }
 
-    /* リップル（簡易） */
-    .ripple{
-      position:absolute; inset:0; pointer-events:none;
-    }
-    .ripple::after{
-      content:"";
-      position:absolute; width:8px; height:8px; border-radius:50%;
-      background: rgba(255,255,255,.45);
-      transform: translate(-50%,-50%) scale(0);
-      opacity:0;
-      transition: transform .6s ease, opacity .6s ease;
-    }
-    .btn:active .ripple::after{
-      transform: translate(var(--x),var(--y)) scale(25);
-      opacity:.12;
+    /* 下の四角（背景とは別） */
+    .bottom-rect {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      height: 55.55vh; /* 全体の9分の5 ≒ 55.55% */
+      background: rgba(255, 255, 255, 0.9); /* 白＋透明度 */
+      border-top: 1px solid rgba(0, 0, 0, 0.1);
+      box-shadow: 0 -8px 20px rgba(0, 0, 0, 0.25);
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
 
-    /* 低速環境での配慮 */
-    @media (prefers-reduced-motion: reduce){
-      .btn, .card { transition: none !important; animation:none !important; }
-      .btn:hover{ transform:none; }
+    .content {
+      font: 600 20px/1.4 system-ui, "Segoe UI", Roboto, sans-serif;
+      color: #111827;
+      text-align: center;
     }
-
-    footer{
-      margin-top:20px; opacity:.85; font-size:12px;
-      text-align:center;
-    }
-    footer a{ color: var(--accent); }
   </style>
 </head>
 <body>
-<main class="wrap">
-
-  <!-- STEP 1: パスワード入力 -->
-  <section id="step-password" class="card">
-    <h1>パスワード入力</h1>
-    <input id="passwordInput" type="password" placeholder="パスワードを入力">
-    <button id="passwordBtn">決定</button>
-  </section>
-
-  <!-- STEP 2: チーム選択 -->
-  <section id="step-team" class="card hidden">
-    <h1>チーム選択</h1>
-    <button class="teamBtn" data-team="1">チーム1</button>
-    <button class="teamBtn" data-team="2">チーム2</button>
-    <button class="teamBtn" data-team="3">チーム3</button>
-    <button class="teamBtn" data-team="4">チーム4</button>
-  </section>
-
-  <!-- STEP 3: 役職選択 -->
-  <section id="step-role" class="card hidden">
-    <h1>役職選択</h1>
-    <button class="roleBtn" data-role="leader">リーダー</button>
-    <button class="roleBtn" data-role="support">サポーター</button>
-    <button class="roleBtn" data-role="hunter">ハンター</button>
-  </section>
-
-  <!-- STEP 4: メニュー（最初のコードのまま） -->
-  <section id="step-menu" class="card hidden">
-    <h1 class="title">メニュー</h1>
-    <div id="link-grid" class="grid"></div>
-  </section>
-</main>
-
-
-  <script>
-function initMenu(){
-  const links = [
-    { name: "釣り", desc: "移動", href: "turi.html", icon: "🎣", key: "1" },
-    { name: "狩り", desc: "移動", href: "kari.html", icon: "🦌", key: "2" },
-    { name: "採取", desc: "移動", href: "monitor.html", icon: "🍄", key: "3" },
-  ];
-
-  const grid = document.getElementById("link-grid");
-  grid.innerHTML = "";
-
-  links.forEach((item, i) => {
-    const a = document.createElement("a");
-    a.className = "btn";
-    a.href = item.href;
-    a.setAttribute("role","listitem");
-    a.setAttribute("aria-label", `${item.name}を開く`);
-
-    const icon = document.createElement("div");
-    icon.className = "icon";
-    icon.textContent = item.icon || "🔗";
-
-    const label = document.createElement("div");
-    label.className = "label";
-
-    const name = document.createElement("div");
-    name.className = "name";
-    name.textContent = item.name;
-
-    const desc = document.createElement("div");
-    desc.className = "desc";
-    desc.textContent = item.desc || item.href;
-
-    const kbd = document.createElement("div");
-    kbd.className = "kbd";
-    kbd.textContent = item.key || i+1;
-
-    const ripple = document.createElement("span");
-    ripple.className = "ripple";
-
-    label.appendChild(name);
-    label.appendChild(desc);
-    a.appendChild(icon);
-    a.appendChild(label);
-    a.appendChild(kbd);
-    a.appendChild(ripple);
-
-    a.addEventListener("pointerdown", (e) => {
-      const rect = a.getBoundingClientRect();
-      const x = ((e.clientX - rect.left) / rect.width) * 100;
-      const y = ((e.clientY - rect.top) / rect.height) * 100;
-      a.style.setProperty("--x", x + "%");
-      a.style.setProperty("--y", y + "%");
-    });
-
-    grid.appendChild(a);
-  });
-
-  // キーショートカット
-  window.addEventListener("keydown", (e) => {
-    const idx = links.findIndex(l => l.key === e.key);
-    if (idx !== -1){
-      window.location.href = links[idx].href;
-    }
-  });
-}
-
-  </script>
-  <script type="module">
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
-  import { getDatabase, ref, get, child } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js";
-
-  // あなたの Firebase 設定を貼り付けてください
-
-    const firebaseConfig = {
-  apiKey: "AIzaSyDPe5cSCavq5gHopugdOfQ-9_50cTrqmyk",
-  authDomain: "school-178c2.firebaseapp.com",
-      databaseURL: "https://school-178c2-default-rtdb.europe-west1.firebasedatabase.app",
-  projectId: "school-178c2",
-  storageBucket: "school-178c2.firebasestorage.app",
-  messagingSenderId: "409885673101",
-  appId: "1:409885673101:web:25bf0483547e2d470304c4"
-};
-
-
-  const app = initializeApp(firebaseConfig);
-  const db = getDatabase(app);
-
-  // =============================
-  // 画面制御ロジックをここに追加
-  // =============================
-
-  let userState = { team:null, role:null };
-
-  // STEP1: パスワード確認
-  document.getElementById("passwordBtn").addEventListener("click", async ()=>{
-    const input = document.getElementById("passwordInput").value;
-
-    // Firebase から正解パスワードを取得
-    const snap = await get(child(ref(db), "game/password"));
-    const correct = snap.exists() ? snap.val() : null;
-
-    if(input === correct){
-      document.getElementById("step-password").classList.add("hidden");
-      document.getElementById("step-team").classList.remove("hidden");
-    }else{
-      alert("パスワードが違います");
-    }
-  });
-
-  // STEP2: チーム選択
-  document.querySelectorAll(".teamBtn").forEach(btn=>{
-    btn.addEventListener("click", ()=>{
-      userState.team = btn.dataset.team;
-      document.getElementById("step-team").classList.add("hidden");
-      document.getElementById("step-role").classList.remove("hidden");
-    });
-  });
-
-  // STEP3: 役職選択
-  document.querySelectorAll(".roleBtn").forEach(btn=>{
-
-
-    btn.addEventListener("click", ()=>{
-      userState.role = btn.dataset.role;
-   initMenu();
-      // Firebase に保存する場合はここで書き込み可能
-      // set(ref(db, "players/"+userId), userState);
-
-      document.getElementById("step-role").classList.add("hidden");
-      document.getElementById("step-menu").classList.remove("hidden");
-    });
-  });
-</script>
-
+  <div class="stage">
+    <!-- 下の四角 -->
+    <div class="bottom-rect">
+      <div class="content">
+        高さ：全体の9分の5（55.55%）
+      </div>
+    </div>
+  </div>
 </body>
 </html>
-
-
-
-
-
-
-
-
