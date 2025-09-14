@@ -64,11 +64,48 @@
     }
 
     /* 画像を配置する全画面オーバーレイ（座標はビューポート基準） */
-    .overlay{
-      position: fixed; inset: 0; z-index: 10;
-      pointer-events: none;   /* クリックは下のゾーンへ通す */
-      overflow: visible;      /* 画面外へ出てもOK */
-    }
+/* 画像を配置する全画面オーバーレイ（座標はビューポート基準） */
+.overlay{
+  position: fixed; inset: 0; z-index: 10;
+  /* pointer-events を auto にして、作物（img）のクリックを受ける */
+  pointer-events: auto;
+  overflow: visible;
+}
+/* 収穫可能状態の見た目 */
+.spawn.harvestable{
+  pointer-events: auto;           /* クリックできる */
+  cursor: pointer;
+  filter: drop-shadow(0 0 8px rgba(255,255,255,.25));
+}
+.spawn.harvestable:hover{
+  transform: translate(-50%,-50%) scale(1.05);
+}
+
+/* === Inventory UI（必要分だけ） === */
+.hud{
+  position:fixed; right:12px; top:12px; z-index:30; display:flex; gap:8px;
+}
+.btn{
+  background:#0b1c26aa; border:1px solid #7ee0ff66; color:#dff7ff;
+  padding:8px 12px; border-radius:10px; backdrop-filter: blur(4px);
+  font-weight:600; cursor:pointer;
+}
+.btn:hover{ background:#0f2a36cc; }
+
+.inv{
+  position:fixed; right:12px; top:56px; width:min(420px, calc(100vw - 24px));
+  max-height:min(70vh, 520px); overflow:auto; z-index:30;
+  background:#06131bdf; border:1px solid #7ee0ff33; border-radius:12px;
+  backdrop-filter: blur(6px); color:#e8fbff; padding:10px 10px 12px;
+}
+.inv h3{ margin:6px 8px 8px; font-size:16px }
+.inv .meta{ margin:0 8px 8px; font-size:12px; opacity:.8 }
+.inv .list{ display:grid; grid-template-columns: 1fr auto; gap:6px 10px; padding:6px 8px }
+.inv .pill{ padding:2px 8px; border-radius:999px; font-size:12px; border:1px solid #ffffff22 }
+.inv .row{ display:contents }
+.inv .name{ white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+.hidden{ display:none !important; }
+
 
     /* クリック位置を“中心”に置く小さな画像（非クリック・非削除） */
     .spawn{
@@ -126,6 +163,15 @@
   <button class="seed-btn" data-seed="bean" data-src="assets/bean.png" title="豆">
     <img src="assets/bean.png" alt="豆">
   </button>
+</div>
+<!-- Inventory パネル -->
+<div id="invPanel" class="inv hidden">
+  <h3>インベントリ</h3>
+  <div class="meta" id="invMeta">合計 0 個</div>
+  <div class="list" id="invList"></div>
+</div>
+<div class="hud">
+  <button id="invBtn" class="btn">🍄 インベントリ</button>
 </div>
 
 
@@ -203,7 +249,22 @@ function applyStage(imgEl, seed, stageIndex){
   imgEl.dataset.stage = String(idx);
   const src = seed.stages[idx] || seed.stages[seed.stages.length - 1];
   if (imgEl.src !== src) imgEl.src = src;
+
+  // ★ 収穫可能制御
+  if (idx === 2){
+    imgEl.classList.add('harvestable');
+    if (!imgEl._harvestBound){
+      imgEl._harvestBound = true;
+      imgEl.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        harvestPlant(imgEl);     // ← 収穫処理（後述）
+      });
+    }
+  } else {
+    imgEl.classList.remove('harvestable');
+  }
 }
+
 
 function startEvolution(imgEl, seed){
   // 念のため既存タイマー解除
@@ -240,6 +301,8 @@ function spawnAt(clientX, clientY) {
   img.dataset.cy = String(clientY);
 
   let done = false;  // ← 二重実行防止フラグ
+  img.dataset.seedKey = seed.key;  // ★収穫時に参照するため
+
   const onLoad = () => {
     if (done) return;
     done = true;
@@ -293,9 +356,127 @@ function spawnAt(clientX, clientY) {
         spawnAt(r.left + r.width/2, r.top + r.height/2);
       }
     });
+    /* ==== Inventory（このページ用の簡易版） ==== */
+const INV_KEY = 'farm_inventory_v1';
+const INV_LIMIT = 20;
+let inventory = loadInv();
+
+function loadInv(){
+  try{
+    const j = localStorage.getItem(INV_KEY);
+    return j ? JSON.parse(j) : { total:0, byName:{} };
+  }catch(_){ return { total:0, byName:{} }; }
+}
+function saveInv(){ localStorage.setItem(INV_KEY, JSON.stringify(inventory)); }
+
+function addHarvestToInv({ name, seedKey }){
+  if (inventory.total >= INV_LIMIT){
+    showToast("インベントリがいっぱいです");
+    return false;
+  }
+  inventory.total++;
+  inventory.byName[name] = (inventory.byName[name]||0) + 1;
+  saveInv();
+  renderInventory();
+  showToast(`+1 ${name} を収穫！`);
+  return true;
+}
+
+function renderInventory(){
+  const meta = document.getElementById('invMeta');
+  const list = document.getElementById('invList');
+  if(!meta || !list) return;
+
+  meta.textContent = `合計 ${inventory.total} 個`;
+
+  const entries = Object.entries(inventory.byName)
+    .sort((a,b)=>a[0].localeCompare(b[0],'ja'));
+  list.innerHTML = '';
+  for(const [name,count] of entries){
+    const rowName = document.createElement('div');
+    rowName.className = 'row name';
+    rowName.textContent = name;
+
+    const rowCtrl = document.createElement('div');
+    rowCtrl.className = 'row';
+    rowCtrl.innerHTML = `
+      <span class="pill">${count}</span>
+      <button class="btnStore">倉庫</button>
+      <button class="btnDrop">捨てる</button>
+    `;
+
+    // 倉庫（Firebase があるときだけ動作）
+    rowCtrl.querySelector('.btnStore').addEventListener('click', async ()=>{
+      if (window.firebaseDB){
+        const { db, ref, push } = window.firebaseDB;
+        await push(ref(db, "warehouse/team1"), { name, count:1, ts:Date.now() });
+        // インベントリから1つ減らす
+        inventory.total = Math.max(0, inventory.total - 1);
+        inventory.byName[name] = Math.max(0, (inventory.byName[name]||0) - 1);
+        if (inventory.byName[name] <= 0) delete inventory.byName[name];
+        saveInv(); renderInventory();
+        showToast(`${name} を倉庫にしまいました`);
+      }else{
+        showToast("倉庫連携（Firebase）が未設定です");
+      }
+    });
+
+    // 捨てる
+    rowCtrl.querySelector('.btnDrop').addEventListener('click', ()=>{
+      inventory.total = Math.max(0, inventory.total - 1);
+      inventory.byName[name] = Math.max(0, (inventory.byName[name]||0) - 1);
+      if (inventory.byName[name] <= 0) delete inventory.byName[name];
+      saveInv(); renderInventory();
+      showToast(`${name} を捨てました`);
+    });
+
+    list.appendChild(rowName);
+    list.appendChild(rowCtrl);
+  }
+}
+
+function toggleInventory(){
+  const p = document.getElementById('invPanel');
+  if(p) p.classList.toggle('hidden');
+}
+
+// 初期化（ページロード時）
+addEventListener('load', () => {
+  renderInventory();
+  const btn = document.getElementById('invBtn');
+  btn && btn.addEventListener('click', toggleInventory);
+});
+
+/* ==== 収穫処理 ==== */
+function harvestPlant(imgEl){
+  // 収穫可能チェック（stage=2 以外は無視）
+  if (imgEl.dataset.stage !== '2') return;
+
+  // 収穫する作物名（種ラベルを使う）
+  const seed = getSeed(imgEl.dataset.seedKey || currentSeedKey);
+  const name = (seed && seed.label) ? seed.label : (seed?.key || '作物');
+
+  // インベントリに追加（満杯なら中断）
+  const ok = addHarvestToInv({ name, seedKey: seed?.key });
+  if (!ok) return;
+
+  // 収穫アニメ＆削除
+  imgEl.classList.remove('harvestable');
+  imgEl.style.transition = 'opacity 160ms ease, transform 160ms ease';
+  imgEl.style.opacity = '0';
+  imgEl.style.transform = 'translate(-50%,-50%) scale(.85)';
+  setTimeout(() => {
+    if (imgEl.parentNode) imgEl.parentNode.removeChild(imgEl);
+  }, 170);
+
+  // 配置カウントを戻す（新たに植えられるように）
+  count = Math.max(0, count - 1);
+}
+
   </script>
 </body>
 </html>
+
 
 
 
