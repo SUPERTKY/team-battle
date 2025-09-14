@@ -230,6 +230,14 @@
  </div>
 
   <script>
+    // === 共通 TEAM 解決（?team=2 など → localStorage → 既定 'team1'） ===
+const TEAM = (() => {
+  const m = location.search.match(/[?&]team=(\d+)/);
+  const t = m ? `team${m[1]}` : (localStorage.getItem('selected_team') || 'team1');
+  localStorage.setItem('selected_team', t); // 他ページ（調理場など）と共有
+  return t;
+})();
+
     // ===== モンスター定義（ここに種類を増やせる） =====
     const MONSTERS = [
       {
@@ -338,8 +346,8 @@ function renderInventory(){
         const api = window.firebaseDB;
         if(!api) throw new Error('no-firebase');
         const { db, ref, push } = api;
-        const dbRef = ref(db, 'warehouse/team1');
-        await push(dbRef, { item:name, count:1, ts:Date.now() });
+        const dbRef = ref(db, `warehouse/${TEAM}`);
+ await push(dbRef, { item: name, count: 1, ts: Date.now(), by: 'battle' });
 
         // 在庫を1つ減らす
         if (inv.byItem[name]){
@@ -643,6 +651,7 @@ addToInventory(item, 1);
 
 </body>
 </html>
+
 
 
 
