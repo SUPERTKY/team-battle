@@ -5,10 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>重ならず・最大6個・中心固定</title>
   <style>
+    
     :root{
       --bg-image: url('assets/sougen2.png');   /* 背景 */
       --panel-height: calc(100dvh * 5 / 9);    /* 下から 9分の5 がホットゾーン */
       --img-size: clamp(72px, 12vmin, 140px);  /* 小さめサイズ */
+      --ui-bg: rgba(11,28,38,.72);
+  --ui-bd: rgba(126,224,255,.35);
     }
 
     html, body { height: 100%; }
@@ -19,6 +22,26 @@
       font-family: system-ui, -apple-system, Segoe UI, Roboto, "Noto Sans JP", Meiryo, sans-serif;
       color: #fff;
     }
+    /* 種選択バー */
+.seedbar{
+  position: fixed; left: 12px; top: 12px; z-index: 30;
+  display: flex; gap: 8px; padding: 8px;
+  background: var(--ui-bg);
+  border: 1px solid var(--ui-bd);
+  border-radius: 14px; backdrop-filter: blur(6px);
+}
+.seed-btn{
+  width: 44px; height: 44px; border-radius: 10px;
+  border: 1px solid rgba(255,255,255,.25);
+  background: rgba(255,255,255,.06);
+  display: grid; place-items: center; cursor: pointer;
+  padding: 0;
+}
+.seed-btn img{ width: 28px; height: 28px; object-fit: contain; pointer-events: none; }
+.seed-btn.is-active{
+  outline: 2px solid #fff; outline-offset: 2px;
+  box-shadow: 0 0 0 2px rgba(255,255,255,.25) inset;
+}
 
     .scrim{
       position: fixed; inset: 0;
@@ -92,19 +115,53 @@
 
   <!-- トースト -->
   <div class="toast" id="toast"></div>
+  <!-- 種を選ぶツールバー -->
+<div class="seedbar" role="toolbar" aria-label="種を選ぶ">
+  <button class="seed-btn is-active" data-seed="spicy" data-src="assets/karai-kudamono.png" title="辛果">
+    <img src="assets/karai-kudamono.png" alt="辛果">
+  </button>
+  <button class="seed-btn" data-seed="berry" data-src="assets/berry.png" title="木の実">
+    <img src="assets/berry.png" alt="木の実">
+  </button>
+  <button class="seed-btn" data-seed="bean" data-src="assets/bean.png" title="豆">
+    <img src="assets/bean.png" alt="豆">
+  </button>
+</div>
+
 
   <script>
     const zone    = document.getElementById('hotzone');
     const overlay = document.getElementById('overlay');
     const toast   = document.getElementById('toast');
+  // 種ボタンの選択ロジック
+const seedButtons = document.querySelectorAll('.seed-btn');
+seedButtons.forEach(btn => {
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation(); // ホットゾーン誤クリック防止
+    // アクティブ表示を更新
+    seedButtons.forEach(b => b.classList.remove('is-active'));
+    btn.classList.add('is-active');
 
-    const IMG_SRC = 'assets/karai-kudamono.png';  // 画像
+    // 現在の画像に反映
+    const src = btn.dataset.src;
+    if (src) currentSrc = src;
+  });
+});
+
+    const SEEDS = [
+  { key: 'spicy', src: 'assets/karai-kudamono.png' },
+  { key: 'berry', src: 'assets/karai-kudamono.png' },
+  { key: 'bean',  src: 'assets/karai-kudamono.png' },
+];
+let currentSrc = SEEDS[0].src; // 現在選択中の種
+
     const MAX = 6;                                // 上限
     let count = 0;
     let toastTimer = null;
 
     // 先読みしておくと1枚目が速い
-    (new Image()).src = IMG_SRC;
+    SEEDS.forEach(s => { (new Image()).src = s.src; });
+
 
     function showToast(text = 'メッセージ') {
       toast.textContent = text;
@@ -126,7 +183,8 @@
       if (count >= MAX) { showToast('これ以上は出せません（最大6個）'); return; }
 
       const img = new Image();
-      img.src = IMG_SRC;
+      img.src = currentSrc;  /* 選択中の種の画像 */
+
       img.alt = '出現画像';
       img.draggable = false;
       img.className = 'spawn';
@@ -186,3 +244,4 @@
   </script>
 </body>
 </html>
+
