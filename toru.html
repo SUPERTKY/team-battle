@@ -239,10 +239,13 @@ function spawnAt(clientX, clientY) {
   img.dataset.cx = String(clientX);
   img.dataset.cy = String(clientY);
 
-  // 先にハンドラ登録 → 追加 → src 設定（キャッシュ即完の取りこぼし防止）
+  let done = false;  // ← 二重実行防止フラグ
   const onLoad = () => {
+    if (done) return;
+    done = true;
+
     requestAnimationFrame(() => {
-      // 自分以外の既存spawnと円判定
+      // 既存spawnと円判定
       const existing = overlay.querySelectorAll('.spawn');
       for (const el of existing) {
         if (el === img) continue;
@@ -269,9 +272,10 @@ function spawnAt(clientX, clientY) {
   overlay.appendChild(img);
   img.src = seed.stages[0] || seed.stages[seed.stages.length - 1];
 
-  // キャッシュ即完の保険
+  // キャッシュ即完の保険（doneで二重防止）
   if (img.complete && img.naturalWidth) onLoad();
 }
+
 
 
 
@@ -292,6 +296,7 @@ function spawnAt(clientX, clientY) {
   </script>
 </body>
 </html>
+
 
 
 
