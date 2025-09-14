@@ -190,12 +190,20 @@
 </main>
 
 <script>
-function initMenu(){
+function initMenu(teamNum){
+  // teamNum が "1"〜"4" ならそのまま、なければ localStorage から拾う
+  const resolvedNum = (() => {
+    if (typeof teamNum === 'string' && /^\d$/.test(teamNum)) return teamNum;
+    const m = (localStorage.getItem('selected_team') || '').match(/^team([1-4])$/);
+    return m ? m[1] : ''; // なければ空（クエリなし）
+  })();
+
   const links = [
     { name: "釣り",   desc: "移動", href: "turi.html",    icon: "🎣", key: "1" },
     { name: "狩り",   desc: "移動", href: "kari.html",    icon: "🦌", key: "2" },
     { name: "採取",   desc: "移動", href: "toru.html",    icon: "🍄", key: "3" },
-    { name: "注文",   desc: "移動", href: `tyuumon.html${selectedTeamNumber ? `?team=${selectedTeamNumber}` : ""}`, icon: "🧾", key: "4" },
+    // 注文だけ team をクエリに付ける（あれば）
+    { name: "注文",   desc: "移動", href: `tyuumon.html${resolvedNum ? `?team=${resolvedNum}` : ""}`, icon: "🧾", key: "4" },
     { name: "オーナー", desc: "管理", href: "o-na-.html",  icon: "👑", key: "5" },
   ];
 
@@ -299,22 +307,21 @@ function initMenu(){
   });
 
   // STEP2: チーム選択 → 直でメニューへ
-  document.querySelectorAll(".teamBtn").forEach(btn=>{
-    btn.addEventListener("click", ()=>{
-      userState.team = btn.dataset.team;
-    localStorage.setItem('selected_team', 'team' + userState.team);
-      // ここで保存したければ set(...) などを入れる
-      // set(ref(db, "players/"+userId), userState);
+document.querySelectorAll(".teamBtn").forEach(btn=>{
+  btn.addEventListener("click", ()=>{
+    userState.team = btn.dataset.team;         // "1" | "2" | "3" | "4"
+    localStorage.setItem('selected_team', 'team' + userState.team); // 永続化
+    initMenu(userState.team);                  // ← ここで数字を渡す
 
-      // 役職ステップは無くし、メニューへ
-      initMenu(userState.team);
-      document.getElementById("step-team").classList.add("hidden");
-      document.getElementById("step-menu").classList.remove("hidden");
-    });
+    document.getElementById("step-team").classList.add("hidden");
+    document.getElementById("step-menu").classList.remove("hidden");
   });
+});
+
 </script>
 
 </body>
 </html>
+
 
 
