@@ -553,7 +553,9 @@ function addHarvestToInv({ name }){
   </script>
 <script type="module">
   import { initializeApp }      from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
-  import { getDatabase, ref, push, onValue }   from "https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js";  <!-- ★ onValue を追加 -->
+ // ★ onValue を追加
+import { getDatabase, ref, push, onValue } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js";
+
   import { getAuth, signInAnonymously, onAuthStateChanged }
          from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
 
@@ -617,6 +619,7 @@ function addHarvestToInv({ name }){
 
 </body>
 </html>
+
 
 
 
