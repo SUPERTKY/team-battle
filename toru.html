@@ -190,6 +190,16 @@ seedButtons.forEach(btn => {
   });
 });
 
+// ページ先頭の <script> 内で
+const TEAM = (() => {
+  const m = location.search.match(/[?&]team=(\d+)/);
+  const t = m ? `team${m[1]}` : (localStorage.getItem('selected_team') || 'team1');
+  localStorage.setItem('selected_team', t);
+  return t;
+})();
+
+// 倉庫保存箇所を:
+
 
 const SEEDS = [
   {
@@ -305,6 +315,7 @@ function startEvolution(imgEl, seed){
 
     // クリック位置 (clientX, clientY) を中心に、重なり無しで追加
 function spawnAt(clientX, clientY) {
+   try { assertNotPaused(); } catch(_) { return; }
   if (count >= MAX) { showToast('これ以上は出せません（最大6個）'); return; }
 
   const seed = getSeed(currentSeedKey);
@@ -427,9 +438,10 @@ function renderInventory(){
 
     // 倉庫（Firebase があるときだけ動作）
     rowCtrl.querySelector('.btnStore').addEventListener('click', async ()=>{
+       try { assertNotPaused(); } catch(_) { return; }
       if (window.firebaseDB){
         const { db, ref, push } = window.firebaseDB;
-        await push(ref(db, "warehouse/team1"), { item:name, count:1, ts:Date.now() });
+        await push(ref(db, `warehouse/${TEAM}`), { item:name, count:1, ts:Date.now() });
         // インベントリから1つ減らす
         inventory.total = Math.max(0, inventory.total - 1);
         inventory.byName[name] = Math.max(0, (inventory.byName[name]||0) - 1);
@@ -443,6 +455,7 @@ function renderInventory(){
 
     // 捨てる
     rowCtrl.querySelector('.btnDrop').addEventListener('click', ()=>{
+       try { assertNotPaused(); } catch(_) { return; }
       inventory.total = Math.max(0, inventory.total - 1);
       inventory.byName[name] = Math.max(0, (inventory.byName[name]||0) - 1);
       if (inventory.byName[name] <= 0) delete inventory.byName[name];
@@ -469,6 +482,7 @@ addEventListener('load', () => {
 
 /* ==== 収穫処理 ==== */
 function harvestPlant(imgEl){
+   try { assertNotPaused(); } catch(_) { return; }
   // 収穫可能チェック（stage=2 以外は無視）
   if (imgEl.dataset.stage !== '2') return;
 
@@ -537,41 +551,73 @@ function addHarvestToInv({ name }){
 }
 
   </script>
-  <script type="module">
+<script type="module">
   import { initializeApp }      from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
-  import { getDatabase, ref, push }
-                               from "https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js";
+  import { getDatabase, ref, push, onValue }   from "https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js";  <!-- ★ onValue を追加 -->
   import { getAuth, signInAnonymously, onAuthStateChanged }
-                               from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
+         from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
 
-  // ★ あなたのプロジェクト設定（前に使っていたものを流用）
-  const firebaseConfig = {
-    apiKey: "AIzaSyDPe5cSCavq5gHopugdOfQ-9_50cTrqmyk",
-    authDomain: "school-178c2.firebaseapp.com",
-    databaseURL: "https://school-178c2-default-rtdb.europe-west1.firebasedatabase.app",
-    projectId: "school-178c2",
-    storageBucket: "school-178c2.firebasestorage.app",
-    messagingSenderId: "409885673101",
-    appId: "1:409885673101:web:25bf0483547e2d470304c4"
-  };
+  const firebaseConfig = { /* 省略 */ };
 
-  // init
   const app  = initializeApp(firebaseConfig);
-  const db   = getDatabase(app);             // Realtime Database
+  const db   = getDatabase(app);
   const auth = getAuth(app);
 
-  // 匿名ログイン（権限ルールを auth 必須にしても動くように）
   const ready = new Promise((resolve) => {
     onAuthStateChanged(auth, (user) => resolve(user));
   });
-  signInAnonymously(auth).catch(err => console.error('Anon sign-in failed', err));
+  signInAnonymously(auth).catch(console.error);
 
-  // 既存の「倉庫」ロジックが使えるよう export
+  // 既存の倉庫連携を他スクリプトから使えるように
   window.firebaseDB = { db, ref, push, auth, ready };
+
+  /* === ここから：一時停止フック（コピペ） === */
+  (function installGlobalPause(db){
+    let paused = false;
+
+    const overlay = document.createElement('div');
+    overlay.style.cssText = `
+      position:fixed; inset:0; display:none; z-index:99999;
+      backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+      background: rgba(0,0,0,.65); color:#fff;
+      font:600 18px/1.4 system-ui,-apple-system,"Noto Sans JP",sans-serif;
+      align-items:center; justify-content:center; text-align:center; padding:24px;`;
+    overlay.innerHTML = `
+      <div style="max-width:740px;">
+        <div style="font-size:22px; margin-bottom:8px;">一時停止中</div>
+        <div id="__pauseMsg" style="opacity:.9;"></div>
+      </div>`;
+    document.body.appendChild(overlay);
+    const msgEl = overlay.querySelector('#__pauseMsg');
+
+    onValue(ref(db, 'game/control/state'), (snap)=>{
+      const s = snap.exists()? snap.val(): null;
+      paused = !!(s && s.paused);
+      if (paused){
+        msgEl.textContent = s?.message || 'オーナーが一時停止しました';
+        overlay.style.display = 'flex';
+      }else{
+        overlay.style.display = 'none';
+      }
+    });
+
+    // フォールバック：入力も捕捉段階で止める
+    const block = (e)=>{ if (paused){ e.stopPropagation(); e.preventDefault(); } };
+    ['click','mousedown','mouseup','touchstart','touchend','keydown','keyup','pointerdown','pointerup']
+      .forEach(t=> document.addEventListener(t, block, true));
+
+    // 主要アクションで呼ぶガード
+    window.assertNotPaused = function(){
+      if (paused) throw new Error('PAUSED');
+    };
+  })(db);
+  /* === ここまで === */
 </script>
+
 
 </body>
 </html>
+
 
 
 
