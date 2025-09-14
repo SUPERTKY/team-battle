@@ -73,8 +73,9 @@
     .muted{ opacity:.8 }
 
     .list{ margin-top:10px; border:1px solid var(--border); border-radius:14px; overflow:hidden }
+    /* 種類列を削除したのでカラム再定義（チーム / ID / ステータス / 作成 / 操作） */
     .thead, .trow{
-      display:grid; grid-template-columns: 90px 120px 160px 1fr 200px 140px;
+      display:grid; grid-template-columns: 90px 120px 1fr 200px 140px;
       gap:8px; align-items:center; padding:10px 12px;
     }
     .thead{ background: rgba(255,255,255,.08); font-weight:800 }
@@ -96,7 +97,7 @@
         <button id="loginBtn" class="btn primary">ログイン</button>
       </div>
       <div id="loginMsg" class="msg" role="status" aria-live="polite"></div>
-      <p class="help">※ Realtime Database の <code>game/ownerPassword</code> と一致した場合のみ入室できます。</p>
+      <!-- 要望により説明文を削除 -->
     </section>
 
     <!-- 注文ダッシュボード -->
@@ -117,7 +118,7 @@
             <button id="createOrderBtn" class="btn primary">注文を全チームに出す</button>
             <div id="createMsg" class="msg" role="status" aria-live="polite"></div>
           </div>
-          <p class="help">※ 料理リストと素材・注文の種類はファイル内の <code>DISH_MASTER</code> を編集してください。</p>
+          <p class="help">※ 料理リストと素材はファイル内の <code>DISH_MASTER</code> を編集してください。</p>
         </div>
 
         <!-- 右：セッション -->
@@ -146,7 +147,7 @@
       <div class="panel" style="margin-top:16px;">
         <h3>注文一覧（チーム別）</h3>
         <div class="thead">
-          <div>チーム</div><div>ID</div><div>種類</div><div>ステータス（料理名 / 素材）</div><div>作成</div><div>操作</div>
+          <div>チーム</div><div>ID</div><div>ステータス（料理名 / 素材）</div><div>作成</div><div>操作</div>
         </div>
         <div id="ordersList" class="list"></div>
         <div id="listMsg" class="msg muted"></div>
@@ -161,13 +162,11 @@
       getDatabase, ref, child, get, push, onValue, remove
     } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js";
 
-    // ======== ★ここを編集：料理一覧＆素材・注文種類（コード側で管理） ========
-    // key: 料理名
-    // value: { type: "注文の種類", materials: ["素材1","素材2",...] }
+    // ======== ★ここを編集：料理名 → 素材配列（種類は廃止） ========
     const DISH_MASTER = {
-      "キノコのクリームパスタ": { type: "通常注文", materials: ["キノコ","乳","小麦","塩"] },
-      "焼き魚定食":            { type: "通常注文", materials: ["魚","米","塩"] },
-      "ハーブスープ":            { type: "特急注文", materials: ["野菜","ハーブ","塩","水"] },
+      "キノコのクリームパスタ": { materials: ["キノコ","乳","小麦","塩"] },
+      "焼き魚定食":            { materials: ["魚","米","塩"] },
+      "ハーブスープ":            { materials: ["野菜","ハーブ","塩","水"] },
       // 追加…
     };
     // ===============================================================
@@ -252,7 +251,7 @@
       const key = dishSelect.value;
       const def = DISH_MASTER[key];
       if (!def){ dishPreview.textContent = '—'; return; }
-      dishPreview.textContent = `種類：${def.type || '—'}　素材：${(def.materials||[]).join('、') || '—'}`;
+      dishPreview.textContent = `素材：${(def.materials||[]).join('、') || '—'}`;
     }
     dishSelect.addEventListener('change', updateDishPreview);
 
@@ -301,7 +300,6 @@
       if (!def){ createMsg.textContent='DISH_MASTERに存在しない料理です。'; createMsg.className='msg err'; return; }
 
       const payload = {
-        type: def.type || '注文',
         status: { dish, materials: Array.isArray(def.materials)? def.materials : [] },
         createdAt: now(),
         updatedAt: now()
@@ -347,7 +345,6 @@
 
           const teamEl = document.createElement('div'); teamEl.textContent = team.toUpperCase().replace('TEAM','チーム');
           const idEl   = document.createElement('div'); idEl.textContent = id.slice(-6);
-          const typeEl = document.createElement('div'); typeEl.textContent = o.type || '—';
 
           const statusEl = document.createElement('div');
           const dishSpan = document.createElement('div'); dishSpan.innerHTML = `<b>${o?.status?.dish || '—'}</b>`;
@@ -361,7 +358,7 @@
           const delBtn = document.createElement('button'); delBtn.className='btn warn'; delBtn.textContent='削除';
           actEl.appendChild(delBtn);
 
-          row.appendChild(teamEl); row.appendChild(idEl); row.appendChild(typeEl); row.appendChild(statusEl); row.appendChild(timeEl); row.appendChild(actEl);
+          row.appendChild(teamEl); row.appendChild(idEl); row.appendChild(statusEl); row.appendChild(timeEl); row.appendChild(actEl);
           ordersList.appendChild(row);
 
           // 個別削除
