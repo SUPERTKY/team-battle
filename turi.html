@@ -151,6 +151,14 @@
   </svg>
 
 <script>
+  // === 共通の TEAM 解決（URL ?team=1 等 → localStorage → 既定 team1） ===
+const TEAM = (() => {
+  const m = location.search.match(/[?&]team=(\d+)/);
+  const t = m ? `team${m[1]}` : (localStorage.getItem('selected_team') || 'team1');
+  localStorage.setItem('selected_team', t);
+  return t;
+})();
+
 const CONFIG = {
   FISH_MIN_SIZE: 100,
   FISH_MAX_SIZE: 220,
@@ -525,21 +533,27 @@ function renderInventory(){
     `;
 
     // 倉庫にしまう
-    rowCount.querySelector('.btnStore').addEventListener('click', async ()=>{
-      const { db, ref, push } = window.firebaseDB;
-      const dbRef = ref(db, "warehouse/team1");
-      await push(dbRef, { species:name, count:1, ts:Date.now() });
+// 倉庫にしまう（TEAM と item に統一）
+rowCount.querySelector('.btnStore').addEventListener('click', async ()=>{
+  try{
+    const { db, ref, push } = window.firebaseDB;
+    const dbRef = ref(db, `warehouse/${TEAM}`);
+    await push(dbRef, { item: name, count: 1, ts: Date.now(), by: 'turi' });
 
-      // インベントリから削除
-      if(inventory.bySpecies[name]){
-        inventory.total--;
-        inventory.bySpecies[name]--;
-        if(inventory.bySpecies[name] <= 0) delete inventory.bySpecies[name];
-        saveInv();
-        renderInventory();
-        showToast(`${name} を倉庫にしまいました`);
-      }
-    });
+    // インベントリから削除
+    if (inventory.bySpecies[name]) {
+      inventory.total--;
+      inventory.bySpecies[name]--;
+      if (inventory.bySpecies[name] <= 0) delete inventory.bySpecies[name];
+      saveInv();
+      renderInventory();
+      showToast(`${name} を倉庫にしまいました`);
+    }
+  }catch(e){
+    showToast('倉庫にしまうには Firebase の設定が必要です');
+  }
+});
+
 
     // 捨てる
     rowCount.querySelector('.btnDrop').addEventListener('click', ()=>{
@@ -599,6 +613,7 @@ const firebaseConfig = {
 
 </body>
 </html>
+
 
 
 
