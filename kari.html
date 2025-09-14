@@ -629,7 +629,7 @@ addToInventory(item, 1);
   <!-- Firebase（倉庫保存用） -->
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
-  import { getDatabase, ref, push } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js";
+ import { getDatabase, ref, push, onValue } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js";
 
   // ★あなたが使っていた設定
   const firebaseConfig = {
@@ -644,6 +644,50 @@ addToInventory(item, 1);
 
   const app = initializeApp(firebaseConfig);
   const db  = getDatabase(app);
+// === グローバル一時停止フック ===
+(function installGlobalPause(db){
+  let paused = false;
+
+  // 画面オーバーレイ（生成）
+  const overlay = document.createElement('div');
+  overlay.style.cssText = `
+    position:fixed; inset:0; display:none; z-index:99999;
+    backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+    background: rgba(0,0,0,.65); color:#fff;
+    font:600 18px/1.4 system-ui, -apple-system, "Noto Sans JP", sans-serif;
+    align-items:center; justify-content:center; text-align:center; padding:24px;
+  `;
+  overlay.innerHTML = `
+    <div style="max-width:740px;">
+      <div style="font-size:22px; margin-bottom:8px;">一時停止中</div>
+      <div id="__pauseMsg" style="opacity:.9;"></div>
+    </div>`;
+  document.body.appendChild(overlay);
+  const msgEl = overlay.querySelector('#__pauseMsg');
+
+  // 状態購読
+  onValue(ref(db, 'game/control/state'), (snap)=>{
+    const s = snap.exists()? snap.val(): null;
+    paused = !!(s && s.paused);
+    if (paused){
+      msgEl.textContent = s?.message || 'オーナーが一時停止しました';
+      overlay.style.display = 'flex';
+    }else{
+      overlay.style.display = 'none';
+    }
+  });
+
+  // 入力ブロック（キャプチャ段階で止める）
+  const block = (e)=>{ if (paused){ e.stopPropagation(); e.preventDefault(); } };
+  ['click','mousedown','mouseup','touchstart','touchend','keydown','keyup','pointerdown','pointerup'].forEach(type=>{
+    document.addEventListener(type, block, true);
+  });
+
+  // アクション関数用ガード（必要な箇所で呼べるようにグローバル化）
+  window.assertNotPaused = function(){
+    if (paused) throw new Error('PAUSED');
+  };
+})(db);
 
   // 他のスクリプト（インベントリの「倉庫」ボタン）から使えるようにexport
   window.firebaseDB = { db, ref, push };
@@ -651,6 +695,7 @@ addToInventory(item, 1);
 
 </body>
 </html>
+
 
 
 
