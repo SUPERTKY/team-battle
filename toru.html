@@ -231,12 +231,8 @@ function spawnAt(clientX, clientY) {
   img.style.left = clientX + 'px';
   img.style.top  = clientY + 'px';
 
-  // 判定のためにまずステージ0画像をセット
-  img.src = seed.stages[0] || seed.stages[seed.stages.length - 1];
-
-  overlay.appendChild(img);
-
-  img.addEventListener('load', () => {
+  // --- ここがポイント：先に onLoad を用意してリスナー登録 ---
+  const onLoad = () => {
     requestAnimationFrame(() => {
       const cand = img.getBoundingClientRect();
       let overlap = false;
@@ -252,18 +248,25 @@ function spawnAt(clientX, clientY) {
         return;
       }
 
-      // 採用 → 表示＆進化開始
       img.classList.add('show');
       count++;
       startEvolution(img, seed);
     });
-  });
+  };
 
+  img.addEventListener('load', onLoad, { once: true });
   img.addEventListener('error', () => {
     img.remove();
     showToast('画像の読み込みに失敗しました');
-  });
+  }, { once: true });
+
+  overlay.appendChild(img);
+  img.src = seed.stages[0] || seed.stages[seed.stages.length - 1];
+
+  // キャッシュ即完了の保険
+  if (img.complete && img.naturalWidth) onLoad();
 }
+
 
 
     // 透明ゾーンのクリックで生成
@@ -282,6 +285,7 @@ function spawnAt(clientX, clientY) {
   </script>
 </body>
 </html>
+
 
 
 
