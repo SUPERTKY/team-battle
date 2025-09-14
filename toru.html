@@ -186,12 +186,18 @@ const getSeed = (k) => SEEDS.find(s => s.key === k) || SEEDS[0];
     }
 
     // 軸平行矩形の当たり判定（重なるなら true）
-    function rectsOverlap(a, b) {
-      return (a.left < b.right &&
-              a.right > b.left &&
-              a.top < b.bottom &&
-              a.bottom > b.top);
-    }
+// 中心と半径で当たり判定（画像幅の半分＝半径）
+function circlesOverlap(a, b){
+  const ax = parseFloat(a.dataset.cx) || (a.getBoundingClientRect().left + a.offsetWidth/2);
+  const ay = parseFloat(a.dataset.cy) || (a.getBoundingClientRect().top  + a.offsetHeight/2);
+  const bx = parseFloat(b.dataset.cx) || (b.getBoundingClientRect().left + b.offsetWidth/2);
+  const by = parseFloat(b.dataset.cy) || (b.getBoundingClientRect().top  + b.offsetHeight/2);
+  const ar = a.offsetWidth / 2;
+  const br = b.offsetWidth / 2;
+  const dx = ax - bx, dy = ay - by;
+  return (dx*dx + dy*dy) < (ar + br) * (ar + br);
+}
+
 function applyStage(imgEl, seed, stageIndex){
   const idx = Math.max(0, Math.min(2, stageIndex|0)); // 0..2
   imgEl.dataset.stage = String(idx);
@@ -230,24 +236,24 @@ function spawnAt(clientX, clientY) {
   // クリック位置＝中心（絶対）
   img.style.left = clientX + 'px';
   img.style.top  = clientY + 'px';
+  img.dataset.cx = String(clientX);
+  img.dataset.cy = String(clientY);
 
-  // --- ここがポイント：先に onLoad を用意してリスナー登録 ---
+  // 先にハンドラ登録 → 追加 → src 設定（キャッシュ即完の取りこぼし防止）
   const onLoad = () => {
     requestAnimationFrame(() => {
-      const cand = img.getBoundingClientRect();
-      let overlap = false;
-
-      const existing = overlay.querySelectorAll('.spawn.show');
+      // 自分以外の既存spawnと円判定
+      const existing = overlay.querySelectorAll('.spawn');
       for (const el of existing) {
-        if (rectsOverlap(cand, el.getBoundingClientRect())) { overlap = true; break; }
+        if (el === img) continue;
+        if (circlesOverlap(img, el)) {
+          img.remove();
+          showToast('そこには置けません（重なります）');
+          return;
+        }
       }
 
-      if (overlap) {
-        img.remove();
-        showToast('そこには置けません（重なります）');
-        return;
-      }
-
+      // 採用 → 表示＆進化開始
       img.classList.add('show');
       count++;
       startEvolution(img, seed);
@@ -263,9 +269,10 @@ function spawnAt(clientX, clientY) {
   overlay.appendChild(img);
   img.src = seed.stages[0] || seed.stages[seed.stages.length - 1];
 
-  // キャッシュ即完了の保険
+  // キャッシュ即完の保険
   if (img.complete && img.naturalWidth) onLoad();
 }
+
 
 
 
@@ -285,6 +292,7 @@ function spawnAt(clientX, clientY) {
   </script>
 </body>
 </html>
+
 
 
 
