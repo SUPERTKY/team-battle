@@ -137,30 +137,45 @@
 const seedButtons = document.querySelectorAll('.seed-btn');
 seedButtons.forEach(btn => {
   btn.addEventListener('click', (e) => {
-    e.stopPropagation(); // ホットゾーン誤クリック防止
-    // アクティブ表示を更新
+    e.stopPropagation();
     seedButtons.forEach(b => b.classList.remove('is-active'));
     btn.classList.add('is-active');
-
-    // 現在の画像に反映
-    const src = btn.dataset.src;
-    if (src) currentSrc = src;
+    if (btn.dataset.seed) currentSeedKey = btn.dataset.seed; // ← keyを保持
   });
 });
 
-    const SEEDS = [
-  { key: 'spicy', src: 'assets/karai-kudamono.png' },
-  { key: 'berry', src: 'assets/karai-kudamono.png' },
-  { key: 'bean',  src: 'assets/karai-kudamono.png' },
+
+const SEEDS = [
+  {
+    key: 'spicy', label: '辛果',
+    // 3段階の画像（とりあえず既存画像にしておく。差し替えOK）
+    stages: ['assets/karai-kudamono.png','assets/karai-kudamono.png','assets/karai-kudamono.png'],
+    // 進化時間（ms）：[第1→第2, 第2→第3]
+    growMs: [4000, 6000]
+  },
+  {
+    key: 'berry', label: '木の実',
+    stages: ['assets/berry.png','assets/berry.png','assets/berry.png'],
+    growMs: [3000, 5000]
+  },
+  {
+    key: 'bean', label: '豆',
+    stages: ['assets/bean.png','assets/bean.png','assets/bean.png'],
+    growMs: [2000, 4000]
+  },
 ];
-let currentSrc = SEEDS[0].src; // 現在選択中の種
+let currentSeedKey = SEEDS[0].key;
+const getSeed = (k) => SEEDS.find(s => s.key === k) || SEEDS[0];
+
+
 
     const MAX = 6;                                // 上限
     let count = 0;
     let toastTimer = null;
 
     // 先読みしておくと1枚目が速い
-    SEEDS.forEach(s => { (new Image()).src = s.src; });
+    SEEDS.forEach(s => s.stages.forEach(src => { const im = new Image(); im.src = src; }));
+
 
 
     function showToast(text = 'メッセージ') {
@@ -177,6 +192,29 @@ let currentSrc = SEEDS[0].src; // 現在選択中の種
               a.top < b.bottom &&
               a.bottom > b.top);
     }
+function applyStage(imgEl, seed, stageIndex){
+  const idx = Math.max(0, Math.min(2, stageIndex|0)); // 0..2
+  imgEl.dataset.stage = String(idx);
+  const src = seed.stages[idx] || seed.stages[seed.stages.length - 1];
+  if (imgEl.src !== src) imgEl.src = src;
+}
+
+function startEvolution(imgEl, seed){
+  // 念のため既存タイマー解除
+  if (imgEl._t1) clearTimeout(imgEl._t1);
+  if (imgEl._t2) clearTimeout(imgEl._t2);
+
+  // ステージ0にセット
+  applyStage(imgEl, seed, 0);
+
+  const [t1, t2] = seed.growMs || [];
+  if (Number.isFinite(t1)){
+    imgEl._t1 = setTimeout(() => applyStage(imgEl, seed, 1), t1);
+  }
+  if (Number.isFinite(t1) && Number.isFinite(t2)){
+    imgEl._t2 = setTimeout(() => applyStage(imgEl, seed, 2), t1 + t2);
+  }
+}
 
     // クリック位置 (clientX, clientY) を中心に、重なり無しで追加
     function spawnAt(clientX, clientY) {
@@ -244,4 +282,5 @@ let currentSrc = SEEDS[0].src; // 現在選択中の種
   </script>
 </body>
 </html>
+
 
