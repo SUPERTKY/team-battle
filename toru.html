@@ -537,8 +537,42 @@ function addHarvestToInv({ name }){
 }
 
   </script>
+  <script type="module">
+  import { initializeApp }      from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
+  import { getDatabase, ref, push }
+                               from "https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js";
+  import { getAuth, signInAnonymously, onAuthStateChanged }
+                               from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
+
+  // ★ あなたのプロジェクト設定（前に使っていたものを流用）
+  const firebaseConfig = {
+    apiKey: "AIzaSyDPe5cSCavq5gHopugdOfQ-9_50cTrqmyk",
+    authDomain: "school-178c2.firebaseapp.com",
+    databaseURL: "https://school-178c2-default-rtdb.europe-west1.firebasedatabase.app",
+    projectId: "school-178c2",
+    storageBucket: "school-178c2.firebasestorage.app",
+    messagingSenderId: "409885673101",
+    appId: "1:409885673101:web:25bf0483547e2d470304c4"
+  };
+
+  // init
+  const app  = initializeApp(firebaseConfig);
+  const db   = getDatabase(app);             // Realtime Database
+  const auth = getAuth(app);
+
+  // 匿名ログイン（権限ルールを auth 必須にしても動くように）
+  const ready = new Promise((resolve) => {
+    onAuthStateChanged(auth, (user) => resolve(user));
+  });
+  signInAnonymously(auth).catch(err => console.error('Anon sign-in failed', err));
+
+  // 既存の「倉庫」ロジックが使えるよう export
+  window.firebaseDB = { db, ref, push, auth, ready };
+</script>
+
 </body>
 </html>
+
 
 
 
