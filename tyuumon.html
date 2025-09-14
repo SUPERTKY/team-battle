@@ -81,16 +81,10 @@
 <body>
   <div class="wrap">
     <header>
-      <div class="team">
-        <span>現在のチーム：</span>
-        <select id="teamSelect">
-          <option value="team1">チーム1</option>
-          <option value="team2">チーム2</option>
-          <option value="team3">チーム3</option>
-          <option value="team4">チーム4</option>
-        </select>
-        <span id="teamHint" class="muted"></span>
-      </div>
+<div class="team">
+   <span>現在のチーム：</span>
+   <strong id="teamLabel"></strong>
+</div>
       <div class="points">ポイント：<span id="pointsLbl">0</span></div>
     </header>
 
@@ -158,24 +152,16 @@
     const db  = getDatabase(app);
 
     /* =====================  チーム決定  ===================== */
-    const teamSelect = document.getElementById('teamSelect');
-    const teamHint   = document.getElementById('teamHint');
-    function getTeamFromURL(){ const m = location.search.match(/[?&]team=(\d)/); return m ? 'team'+m[1] : null; }
-    function loadTeam(){
-      return getTeamFromURL() || localStorage.getItem('selected_team') || 'team1';
-    }
-    function saveTeam(t){
-      localStorage.setItem('selected_team', t);
-    }
-    let TEAM = loadTeam();
-    teamSelect.value = TEAM;
-    teamHint.textContent = (getTeamFromURL() ? '(URLで指定)' : '(前回の選択を使用)');
-
-    teamSelect.addEventListener('change', ()=>{
-      TEAM = teamSelect.value;
-      saveTeam(TEAM);
-      attachDataBindings(); // 再購読
-    });
+const teamLabel = document.getElementById('teamLabel');
+function getTeamFromURL(){
+   const m = location.search.match(/[?&]team=(\d)/);
+   return m ? 'team'+m[1] : null;
+ }
+ // URL > localStorage > team1 の優先順で固定
+ const TEAM = getTeamFromURL() || localStorage.getItem('selected_team') || 'team1';
+ // 念のため保存（URLで来ても保持）
+ localStorage.setItem('selected_team', TEAM);
+ teamLabel.textContent = TEAM.replace('team','チーム');
 
     /* =====================  ローカル在庫（手持ち）  ===================== */
     const INV_KEY = 'inventory_v1'; // 既存仕様と互換
@@ -524,13 +510,15 @@
       });
     }
 
-    /* =====================  起動  ===================== */
-    initSlots();
-    renderInv();
-    attachDataBindings();
+/* =====================  起動  ===================== */
+initSlots();
+renderInv();
+attachDataBindings(); // ← これ一回だけでOK。以降 TEAM は固定。
+
 
     // util
     function fmt(ts){ try{ const d=new Date(ts); return `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}` }catch{ return '—' } }
   </script>
 </body>
 </html>
+
