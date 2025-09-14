@@ -3,11 +3,11 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>透明ホットゾーン → 画像表示</title>
+  <title>透明ホットゾーン → 画像をクリック位置に表示</title>
   <style>
     :root{
-      --bg-image: url('assets/sougen2.png'); /* 背景（差し替えOK） */
-      --panel-height: calc(100dvh * 5 / 9);     /* 下から 9分の5 の高さ */
+      --bg-image: url('assets/sougen2.png');  /* 背景（差し替えOK） */
+      --panel-height: calc(100dvh * 5 / 9);   /* 下から 9分の5 の高さ */
     }
 
     html, body { height: 100%; }
@@ -26,87 +26,141 @@
       background: linear-gradient(to top, rgba(0,0,0,.25), transparent 40%);
     }
 
-    /* ===== 透明のクリックゾーン（四角） =====
-       完全透明だが、クリックは取れる。 */
+    /* ===== 透明のクリックゾーン（見えない） ===== */
     .hotzone{
       position: fixed;
       left: 0; right: 0; bottom: 0;
       height: var(--panel-height);
-      background: transparent;            /* 透明で見えない */
+      background: transparent;
       border: none;
-      cursor: pointer;                    /* クリックできる雰囲気だけ出す */
-      /* 視覚的な枠が欲しいときだけ開発用に表示：
+      cursor: pointer;
+      /* 開発時だけガイドを表示：
          outline: 1px dashed rgba(255,255,255,.25); */
     }
+    .hotzone:focus-visible{
+      outline: 2px dashed rgba(255,255,255,.6);
+      outline-offset: -2px;
+    }
 
-    /* 画像を乗せるレイヤ（ホットゾーンの上に重ねる） */
+    /* 画像を乗せる層（下5/9に限定） */
     .reveal-layer{
       position: fixed;
       left: 0; right: 0; bottom: 0;
       height: var(--panel-height);
-      display: grid;
-      place-items: center;  /* 中央寄せ */
-      pointer-events: none; /* 画像表示前はクリックを通す */
+      pointer-events: none; /* 画像以外はクリックを通す */
     }
 
-    /* 表示する画像（最初は非表示） */
+    /* クリック位置に置く画像 */
     .reveal-img{
+      position: absolute;
+      left: 50%; top: 50%;                 /* 初期は中央 */
+      transform: translate(-50%, -50%) scale(.98);
+      opacity: 0;
+      transition:
+        left 200ms ease, top 200ms ease,
+        opacity 220ms ease, transform 220ms ease;
       max-width: min(92vw, 900px);
       max-height: calc(var(--panel-height) - 24px);
       width: auto; height: auto;
       object-fit: contain;
-      opacity: 0;
-      transform: translateY(8px);
-      transition: opacity 220ms ease, transform 220ms ease;
-      pointer-events: auto; /* 表示後はクリック可能（閉じる用） */
       user-select: none;
+      pointer-events: auto; /* 画像自体はクリック可（閉じる） */
     }
     .reveal-img.show{
       opacity: 1;
-      transform: translateY(0);
-    }
-
-    /* キーボード操作でのアクセシビリティ */
-    .hotzone:focus-visible{
-      outline: 2px dashed rgba(255,255,255,.6);
-      outline-offset: -2px;
+      transform: translate(-50%, -50%) scale(1);
     }
   </style>
 </head>
 <body>
   <div class="scrim"></div>
 
-  <!-- クリックすると画像が出る透明の四角（見えない） -->
+  <!-- クリックで位置指定する透明ゾーン -->
   <div class="hotzone" id="hotzone" role="button" tabindex="0"
-       aria-label="画像を表示（下部の透明ゾーン）"></div>
+       aria-label="下部の透明ゾーン（クリックで画像を表示）"></div>
 
-  <!-- 画像を重ねる層（クリック後にフェードイン） -->
-  <div class="reveal-layer" aria-hidden="true">
-    <img id="revealImg" class="reveal-img" src="assets/karai-kudamono.png" alt="表示画像">
+  <!-- 画像を重ねる層 -->
+  <div class="reveal-layer" id="layer" aria-hidden="true">
+    <img id="revealImg" class="reveal-img"
+         src="assets/karai-kudamono.png" alt="表示画像">
   </div>
 
   <script>
-    const zone = document.getElementById('hotzone');
-    const img  = document.getElementById('revealImg');
-    let shown = false;
+    const zone  = document.getElementById('hotzone');
+    const layer = document.getElementById('layer');
+    const img   = document.getElementById('revealImg');
 
-    function toggle(show) {
-      if (show === undefined) show = !shown;
-      shown = show;
-      img.classList.toggle('show', shown);
+    const EDGE_PAD = 12;  // 端の余白（画像がはみ出さないように）
+
+    // 画像を (clientX, clientY) を中心として配置し、必要なら表示する
+    function placeAtClientXY(clientX, clientY, {show = true} = {}) {
+      const rect = layer.getBoundingClientRect();
+      const x = clientX - rect.left;
+      const y = clientY - rect.top;
+
+      // 画像が読み込み済みでサイズが取れるか確認
+      const place = () => {
+        // 現在の表示サイズ（max-width/max-height適用後）
+        const iw = img.offsetWidth || 1;
+        const ih = img.offsetHeight || 1;
+
+        // 画像中心が入ってよい範囲を算出（端で切れないようにクランプ）
+        const minX = EDGE_PAD + iw / 2;
+        const maxX = rect.width  - EDGE_PAD - iw / 2;
+        const minY = EDGE_PAD + ih / 2;
+        const maxY = rect.height - EDGE_PAD - ih / 2;
+
+        const cx = Math.max(minX, Math.min(maxX, x));
+        const cy = Math.max(minY, Math.min(maxY, y));
+
+        img.style.left = `${cx}px`;
+        img.style.top  = `${cy}px`;
+
+        if (show) img.classList.add('show');
+      };
+
+      if (img.complete && img.naturalWidth) {
+        place();
+      } else {
+        // 初回読み込み前にクリックされた場合の保険
+        img.addEventListener('load', place, { once: true });
+      }
     }
 
-    // 透明ゾーンをクリック / Enter / Space でトグル
-    zone.addEventListener('click', () => toggle());
+    function centerOfZone() {
+      const zr = zone.getBoundingClientRect();
+      return { x: zr.left + zr.width / 2, y: zr.top + zr.height / 2 };
+    }
+
+    // クリックでその位置に表示／移動
+    zone.addEventListener('click', (e) => {
+      placeAtClientXY(e.clientX, e.clientY, { show: true });
+    });
+
+    // キーボード操作（Enter/Space）はゾーン中央に表示
     zone.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
-        toggle();
+        const c = centerOfZone();
+        placeAtClientXY(c.x, c.y, { show: true });
       }
+      // Escapeで閉じる
+      if (e.key === 'Escape') img.classList.remove('show');
     });
 
-    // 画像クリックで閉じる（任意）
-    img.addEventListener('click', () => toggle(false));
+    // 画像クリックで閉じる
+    img.addEventListener('click', () => img.classList.remove('show'));
+
+    // リサイズ時も、はみ出さないように現在位置を再クランプ
+    window.addEventListener('resize', () => {
+      if (!img.classList.contains('show')) return;
+      const rect = layer.getBoundingClientRect();
+      const current = img.getBoundingClientRect();
+      // 現在の中心座標（ビューポート基準）を再配置に使う
+      const cx = current.left + current.width / 2;
+      const cy = current.top  + current.height / 2;
+      placeAtClientXY(cx, cy, { show: true });
+    });
   </script>
 </body>
 </html>
