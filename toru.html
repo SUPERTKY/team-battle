@@ -217,54 +217,54 @@ function startEvolution(imgEl, seed){
 }
 
     // クリック位置 (clientX, clientY) を中心に、重なり無しで追加
-    function spawnAt(clientX, clientY) {
-      if (count >= MAX) { showToast('これ以上は出せません（最大6個）'); return; }
+function spawnAt(clientX, clientY) {
+  if (count >= MAX) { showToast('これ以上は出せません（最大6個）'); return; }
 
-      const img = new Image();
-      img.src = currentSrc;  /* 選択中の種の画像 */
+  const seed = getSeed(currentSeedKey);
 
-      img.alt = '出現画像';
-      img.draggable = false;
-      img.className = 'spawn';
+  const img = new Image();
+  img.alt = '作物';
+  img.draggable = false;
+  img.className = 'spawn';
 
-      // クリック位置を“中心”に（クランプ無し）
-      img.style.left = clientX + 'px';
-      img.style.top  = clientY + 'px';
+  // クリック位置＝中心（絶対）
+  img.style.left = clientX + 'px';
+  img.style.top  = clientY + 'px';
 
-      overlay.appendChild(img);
+  // 判定のためにまずステージ0画像をセット
+  img.src = seed.stages[0] || seed.stages[seed.stages.length - 1];
 
-      // 画像読み込み後に実サイズが確定 → 重なり判定
-      img.addEventListener('load', () => {
-        // レイアウト確定を待ってから判定
-        requestAnimationFrame(() => {
-          const cand = img.getBoundingClientRect();
-          let overlap = false;
+  overlay.appendChild(img);
 
-          // 既存の表示済み画像とAABB判定
-          const existing = overlay.querySelectorAll('.spawn.show');
-          for (const el of existing) {
-            const r = el.getBoundingClientRect();
-            if (rectsOverlap(cand, r)) { overlap = true; break; }
-          }
+  img.addEventListener('load', () => {
+    requestAnimationFrame(() => {
+      const cand = img.getBoundingClientRect();
+      let overlap = false;
 
-          if (overlap) {
-            img.remove();                   // 追加しない
-            showToast('そこには置けません（重なります）');
-            return;
-          }
+      const existing = overlay.querySelectorAll('.spawn.show');
+      for (const el of existing) {
+        if (rectsOverlap(cand, el.getBoundingClientRect())) { overlap = true; break; }
+      }
 
-          // 問題なければ表示
-          img.classList.add('show');
-          count++;
-        });
-      });
-
-      // 読み込み失敗時は要素を捨てる
-      img.addEventListener('error', () => {
+      if (overlap) {
         img.remove();
-        showToast('画像の読み込みに失敗しました');
-      });
-    }
+        showToast('そこには置けません（重なります）');
+        return;
+      }
+
+      // 採用 → 表示＆進化開始
+      img.classList.add('show');
+      count++;
+      startEvolution(img, seed);
+    });
+  });
+
+  img.addEventListener('error', () => {
+    img.remove();
+    showToast('画像の読み込みに失敗しました');
+  });
+}
+
 
     // 透明ゾーンのクリックで生成
     zone.addEventListener('click', (e) => {
@@ -282,5 +282,6 @@ function startEvolution(imgEl, seed){
   </script>
 </body>
 </html>
+
 
 
