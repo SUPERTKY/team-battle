@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>透明ホットゾーン → 画像をクリック位置に表示</title>
+  <title>透明ホットゾーン → 画像をクリック位置に表示（中心固定）</title>
   <style>
     :root{
       --bg-image: url('assets/sougen2.png');  /* 背景（差し替えOK） */
@@ -19,52 +19,50 @@
       color: #fff;
     }
 
-    /* うっすらスクリーン（不要なら削除） */
     .scrim{
       position: fixed; inset: 0;
       pointer-events: none;
       background: linear-gradient(to top, rgba(0,0,0,.25), transparent 40%);
     }
 
-    /* ===== 透明のクリックゾーン（見えない） ===== */
+    /* クリック可能な透明ゾーン（下 5/9） */
     .hotzone{
-      position: fixed;
-      left: 0; right: 0; bottom: 0;
+      position: fixed; left: 0; right: 0; bottom: 0;
       height: var(--panel-height);
       background: transparent;
-      border: none;
       cursor: pointer;
-      /* 開発時だけガイドを表示：
-         outline: 1px dashed rgba(255,255,255,.25); */
+      /* 開発時のガイド：
+      outline: 1px dashed rgba(255,255,255,.25); */
     }
     .hotzone:focus-visible{
       outline: 2px dashed rgba(255,255,255,.6);
       outline-offset: -2px;
     }
 
-    /* 画像を乗せる層（下5/9に限定） */
-    .reveal-layer{
-      position: fixed;
-      left: 0; right: 0; bottom: 0;
-      height: var(--panel-height);
-      pointer-events: none; /* 画像以外はクリックを通す */
+    /* 画像を載せる全画面オーバーレイ（座標はビューポート基準） */
+    .overlay{
+      position: fixed; inset: 0;
+      pointer-events: none;           /* 下のゾーンにクリックを通す */
+      z-index: 10;
+      overflow: visible;              /* 画面外へ出てもOK */
     }
 
-    /* クリック位置に置く画像 */
+    /* クリック位置を中心に配置する画像（クランプなし） */
     .reveal-img{
       position: absolute;
-      left: 50%; top: 50%;                 /* 初期は中央 */
-      transform: translate(-50%, -50%) scale(.98);
+      left: 50%; top: 50%;            /* 初期位置（中央） */
+      transform: translate(-50%, -50%) scale(.98); /* 中心合わせ */
       opacity: 0;
       transition:
-        left 200ms ease, top 200ms ease,
-        opacity 220ms ease, transform 220ms ease;
-      max-width: min(92vw, 900px);
-      max-height: calc(var(--panel-height) - 24px);
+        left 180ms ease, top 180ms ease,
+        opacity 200ms ease, transform 200ms ease;
+      /* サイズ制限はゆるめ。必要なら調整してOK */
+      max-width: min(96vw, 1200px);
+      max-height: 96vh;
       width: auto; height: auto;
       object-fit: contain;
       user-select: none;
-      pointer-events: auto; /* 画像自体はクリック可（閉じる） */
+      pointer-events: auto;           /* 画像はクリック可（閉じる用） */
     }
     .reveal-img.show{
       opacity: 1;
@@ -75,92 +73,45 @@
 <body>
   <div class="scrim"></div>
 
-  <!-- クリックで位置指定する透明ゾーン -->
+  <!-- クリック用の透明ゾーン（下 5/9） -->
   <div class="hotzone" id="hotzone" role="button" tabindex="0"
        aria-label="下部の透明ゾーン（クリックで画像を表示）"></div>
 
-  <!-- 画像を重ねる層 -->
-  <div class="reveal-layer" id="layer" aria-hidden="true">
+  <!-- 画像を全画面基準で配置するオーバーレイ -->
+  <div class="overlay" id="overlay" aria-hidden="true">
     <img id="revealImg" class="reveal-img"
-         src="assets/karai-kudamono.png" alt="表示画像">
+         src="assets/karai-kudamono.png" alt="表示画像" draggable="false">
   </div>
 
   <script>
     const zone  = document.getElementById('hotzone');
-    const layer = document.getElementById('layer');
     const img   = document.getElementById('revealImg');
 
-    const EDGE_PAD = 12;  // 端の余白（画像がはみ出さないように）
-
-    // 画像を (clientX, clientY) を中心として配置し、必要なら表示する
-    function placeAtClientXY(clientX, clientY, {show = true} = {}) {
-      const rect = layer.getBoundingClientRect();
-      const x = clientX - rect.left;
-      const y = clientY - rect.top;
-
-      // 画像が読み込み済みでサイズが取れるか確認
-      const place = () => {
-        // 現在の表示サイズ（max-width/max-height適用後）
-        const iw = img.offsetWidth || 1;
-        const ih = img.offsetHeight || 1;
-
-        // 画像中心が入ってよい範囲を算出（端で切れないようにクランプ）
-        const minX = EDGE_PAD + iw / 2;
-        const maxX = rect.width  - EDGE_PAD - iw / 2;
-        const minY = EDGE_PAD + ih / 2;
-        const maxY = rect.height - EDGE_PAD - ih / 2;
-
-        const cx = Math.max(minX, Math.min(maxX, x));
-        const cy = Math.max(minY, Math.min(maxY, y));
-
-        img.style.left = `${cx}px`;
-        img.style.top  = `${cy}px`;
-
-        if (show) img.classList.add('show');
-      };
-
-      if (img.complete && img.naturalWidth) {
-        place();
-      } else {
-        // 初回読み込み前にクリックされた場合の保険
-        img.addEventListener('load', place, { once: true });
-      }
+    // 指定のビューポート座標（clientX, clientY）を画像の中心にする
+    function showAt(clientX, clientY) {
+      img.style.left = `${clientX}px`;
+      img.style.top  = `${clientY}px`;
+      img.classList.add('show');
     }
 
-    function centerOfZone() {
-      const zr = zone.getBoundingClientRect();
-      return { x: zr.left + zr.width / 2, y: zr.top + zr.height / 2 };
-    }
-
-    // クリックでその位置に表示／移動
+    // クリックでその位置を「中心」に表示（クランプ一切なし）
     zone.addEventListener('click', (e) => {
-      placeAtClientXY(e.clientX, e.clientY, { show: true });
+      showAt(e.clientX, e.clientY);
     });
 
-    // キーボード操作（Enter/Space）はゾーン中央に表示
+    // キーボード（Enter/Space）はゾーン中央に表示、Escで閉じる
     zone.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
-        const c = centerOfZone();
-        placeAtClientXY(c.x, c.y, { show: true });
+        const r = zone.getBoundingClientRect();
+        showAt(r.left + r.width/2, r.top + r.height/2);
+      } else if (e.key === 'Escape') {
+        img.classList.remove('show');
       }
-      // Escapeで閉じる
-      if (e.key === 'Escape') img.classList.remove('show');
     });
 
     // 画像クリックで閉じる
     img.addEventListener('click', () => img.classList.remove('show'));
-
-    // リサイズ時も、はみ出さないように現在位置を再クランプ
-    window.addEventListener('resize', () => {
-      if (!img.classList.contains('show')) return;
-      const rect = layer.getBoundingClientRect();
-      const current = img.getBoundingClientRect();
-      // 現在の中心座標（ビューポート基準）を再配置に使う
-      const cx = current.left + current.width / 2;
-      const cy = current.top  + current.height / 2;
-      placeAtClientXY(cx, cy, { show: true });
-    });
   </script>
 </body>
 </html>
