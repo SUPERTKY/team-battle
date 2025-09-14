@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>オーナー | 管理ページ</title>
+
+  <!-- お好みでフォント（不要なら削除OK） -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;700&display=swap" rel="stylesheet">
+
+  <style>
+    :root{
+      --bg1:#1a2a6c; --bg2:#b21f1f; --bg3:#fdbb2d;
+      --card-bg: rgba(255,255,255,.08);
+      --border: rgba(255,255,255,.18);
+      --text:#fff; --accent:#fff;
+      --shadow: 0 12px 32px rgba(0,0,0,.28);
+      --ok:#22c55e; --warn:#f59e0b; --err:#ef4444;
+    }
+    @media (prefers-color-scheme: light){
+      :root{
+        --card-bg: rgba(255,255,255,.74);
+        --border: rgba(0,0,0,.08);
+        --text:#111827; --accent:#111827;
+      }
+    }
+    *{ box-sizing:border-box }
+    html,body{
+      height:100%; margin:0; color:var(--text);
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, "Poppins", "Noto Sans JP", sans-serif;
+      background: linear-gradient(135deg, var(--bg1), var(--bg2) 55%, var(--bg3));
+      background-attachment: fixed;
+    }
+    .wrap{
+      min-height:100%;
+      display:grid; place-items:center;
+      padding:32px;
+    }
+    .card{
+      width:min(960px, 92vw);
+      background: var(--card-bg);
+      border:1px solid var(--border);
+      border-radius:24px;
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      padding: clamp(20px, 4vw, 36px);
+      animation: pop .5s ease both;
+    }
+    @keyframes pop{ from{opacity:0; transform:translateY(8px) scale(.985)} to{opacity:1; transform:none} }
+
+    .title{ font-weight:700; font-size:clamp(22px,2.6vw,30px); margin:0 0 8px }
+    .sub{ opacity:.9; margin:0 0 16px; font-size:clamp(13px,1.6vw,15px) }
+
+    .row{ display:flex; gap:10px; align-items:center }
+    .input, .btn{
+      font:600 14px/1.2 system-ui,-apple-system,Segoe UI,Roboto,"Noto Sans JP",sans-serif;
+      border-radius:12px; padding:12px 14px;
+      border:1px solid var(--border); background: rgba(255,255,255,.1);
+      color:inherit;
+    }
+    .input{ flex:1 1 auto; min-width:0; }
+    .btn{ cursor:pointer; user-select:none; white-space:nowrap; }
+    .btn.primary{ background: rgba(34,197,94,.18); border-color: rgba(34,197,94,.35); }
+    .btn.warn{ background: rgba(245,158,11,.16); border-color: rgba(245,158,11,.35); }
+    .btn.neutral{ background: rgba(255,255,255,.12); }
+    .btn:hover{ filter:brightness(1.04) }
+    .btn:active{ transform: translateY(1px) }
+
+    .help{ font-size:12px; opacity:.85; margin-top:8px }
+    .msg{ margin-top:10px; font-size:13px; }
+    .msg.ok{ color: var(--ok) } .msg.err{ color: var(--err) } .msg.warn{ color: var(--warn) }
+
+    .grid{
+      display:grid; gap:14px;
+      grid-template-columns: repeat(2, minmax(0,1fr));
+      margin-top:16px;
+    }
+    @media (max-width:760px){ .grid{ grid-template-columns: 1fr } }
+    .panel{
+      padding:14px; border:1px solid var(--border); border-radius:16px;
+      background: rgba(0,0,0,.12);
+    }
+    .panel h3{ margin:0 0 10px; font-size:16px }
+    .kv{ display:flex; gap:8px; align-items:center; margin-top:10px }
+    .kv .k{ width:9em; opacity:.85; font-size:13px }
+    .kv .v{ flex:1; font-weight:700 }
+    .links{ display:flex; gap:10px; flex-wrap:wrap; margin-top:8px }
+    .link{ text-decoration:none; color:inherit }
+    .hidden{ display:none !important; }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+
+    <!-- ログインカード -->
+    <section id="loginCard" class="card" aria-labelledby="loginTitle">
+      <h1 id="loginTitle" class="title">オーナーログイン</h1>
+      <p class="sub">パスワードを入力して管理ページへ進んでください。</p>
+
+      <div class="row" style="margin-top:6px;">
+        <input id="pw" class="input" type="password" placeholder="オーナーパスワード">
+        <button id="togglePw" class="btn neutral" aria-pressed="false" title="表示/非表示">👁</button>
+        <button id="loginBtn" class="btn primary">ログイン</button>
+      </div>
+      <div id="loginMsg" class="msg" role="status" aria-live="polite"></div>
+
+      <p class="help">
+        ※Firebase Realtime Database の <code>game/ownerPassword</code> に設定された文字列と一致した場合に入室できます。<br>
+        例：<code>"secret123"</code>
+      </p>
+    </section>
+
+    <!-- ダッシュボード -->
+    <section id="dashCard" class="card hidden" aria-labelledby="dashTitle">
+      <h1 id="dashTitle" class="title">オーナーダッシュボード</h1>
+      <p class="sub">このページはオーナーのみが閲覧・操作できます。</p>
+
+      <div class="grid">
+        <div class="panel">
+          <h3>セッション</h3>
+          <div class="kv"><div class="k">状態</div><div id="sessState" class="v">—</div></div>
+          <div class="kv"><div class="k">有効期限</div><div id="sessExp" class="v">—</div></div>
+          <div class="links">
+            <button id="logoutBtn" class="btn warn">ログアウト</button>
+            <button id="backBtn" class="btn neutral">戻る</button>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h3>パスワード変更</h3>
+          <div class="row">
+            <input id="newPw" class="input" type="text" placeholder="新しいオーナーパスワード">
+            <button id="changeBtn" class="btn primary">変更</button>
+          </div>
+          <div id="changeMsg" class="msg" role="status" aria-live="polite"></div>
+          <p class="help">※ Realtime Database の <code>game/ownerPassword</code> を上書き保存します。</p>
+        </div>
+      </div>
+
+      <div class="panel" style="margin-top:14px;">
+        <h3>クイックリンク</h3>
+        <div class="links">
+          <a class="btn link neutral" href="tyuumon.html">注文ページへ</a>
+          <a class="btn link neutral" href="turi.html">釣り</a>
+          <a class="btn link neutral" href="kari.html">狩り</a>
+          <a class="btn link neutral" href="toru.html">採取</a>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Firebase -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
+    import { getDatabase, ref, child, get, set } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js";
+
+    // ★あなたの Firebase 設定（メニューと同じプロジェクト）
+    const firebaseConfig = {
+      apiKey: "AIzaSyDPe5cSCavq5gHopugdOfQ-9_50cTrqmyk",
+      authDomain: "school-178c2.firebaseapp.com",
+      databaseURL: "https://school-178c2-default-rtdb.europe-west1.firebasedatabase.app",
+      projectId: "school-178c2",
+      storageBucket: "school-178c2.firebasestorage.app",
+      messagingSenderId: "409885673101",
+      appId: "1:409885673101:web:25bf0483547e2d470304c4"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db  = getDatabase(app);
+
+    // ===== DOM =====
+    const loginCard = document.getElementById('loginCard');
+    const dashCard  = document.getElementById('dashCard');
+    const pwInput   = document.getElementById('pw');
+    const loginBtn  = document.getElementById('loginBtn');
+    const loginMsg  = document.getElementById('loginMsg');
+    const togglePw  = document.getElementById('togglePw');
+
+    const sessState = document.getElementById('sessState');
+    const sessExp   = document.getElementById('sessExp');
+    const logoutBtn = document.getElementById('logoutBtn');
+    const backBtn   = document.getElementById('backBtn');
+
+    const newPw     = document.getElementById('newPw');
+    const changeBtn = document.getElementById('changeBtn');
+    const changeMsg = document.getElementById('changeMsg');
+
+    // ===== セッション =====
+    const SS_KEY = 'owner_session_v1';
+    const SESSION_MS = 2 * 60 * 60 * 1000; // 2時間
+
+    function now(){ return Date.now(); }
+    function fmt(ts){
+      try{
+        const d = new Date(ts);
+        return `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+      }catch{ return '—'; }
+    }
+    function loadSess(){
+      try{
+        const raw = sessionStorage.getItem(SS_KEY);
+        return raw ? JSON.parse(raw) : null;
+      }catch{ return null; }
+    }
+    function saveSess(obj){
+      try{ sessionStorage.setItem(SS_KEY, JSON.stringify(obj)); }catch{}
+    }
+    function clearSess(){
+      try{ sessionStorage.removeItem(SS_KEY); }catch{}
+    }
+
+    function updateSessUI(sess){
+      if (sess && sess.ok){
+        sessState.textContent = 'ログイン中';
+        sessExp.textContent = fmt(sess.exp);
+      }else{
+        sessState.textContent = '未ログイン';
+        sessExp.textContent = '—';
+      }
+    }
+
+    function showDash(){ loginCard.classList.add('hidden'); dashCard.classList.remove('hidden'); }
+    function showLogin(){ dashCard.classList.add('hidden'); loginCard.classList.remove('hidden'); }
+
+    // 起動時：既存セッションが生きていればダッシュボードへ
+    (function boot(){
+      const s = loadSess();
+      if (s && s.ok && s.exp > now()){
+        updateSessUI(s);
+        showDash();
+      }else{
+        clearSess();
+        showLogin();
+      }
+    })();
+
+    // パスワード表示切替
+    togglePw.addEventListener('click', ()=>{
+      const visible = pwInput.type === 'text';
+      pwInput.type = visible ? 'password' : 'text';
+      const pressed = !visible;
+      togglePw.setAttribute('aria-pressed', String(pressed));
+    });
+
+    // Enterでログイン
+    pwInput.addEventListener('keydown', (e)=>{
+      if (e.key === 'Enter') loginBtn.click();
+    });
+
+    // ログイン処理
+    loginBtn.addEventListener('click', async ()=>{
+      loginMsg.textContent = '';
+      const input = pwInput.value;
+      if (!input){
+        loginMsg.textContent = 'パスワードを入力してください。';
+        loginMsg.className = 'msg err';
+        return;
+      }
+      try{
+        const snap = await get(child(ref(db), 'game/ownerPassword'));
+        if (!snap.exists()){
+          loginMsg.textContent = 'サーバー側に ownerPassword が未設定です。管理者に連絡してください。';
+          loginMsg.className = 'msg warn';
+          return;
+        }
+        const correct = String(snap.val() ?? '');
+        if (input === correct){
+          const s = { ok:true, exp: now() + SESSION_MS };
+          saveSess(s);
+          updateSessUI(s);
+          showDash();
+          pwInput.value = '';
+          loginMsg.textContent = '';
+        }else{
+          loginMsg.textContent = 'パスワードが違います。';
+          loginMsg.className = 'msg err';
+        }
+      }catch(e){
+        console.error(e);
+        loginMsg.textContent = 'サーバー通信に失敗しました。ネットワークと権限を確認してください。';
+        loginMsg.className = 'msg err';
+      }
+    });
+
+    // ログアウト
+    logoutBtn.addEventListener('click', ()=>{
+      clearSess();
+      updateSessUI(null);
+      showLogin();
+    });
+
+    // 戻る（メニューへ戻る想定。無ければ履歴戻り）
+    backBtn.addEventListener('click', ()=>{
+      if (document.referrer){
+        history.back();
+      }else{
+        // メニューの実ファイル名に合わせて変更してください
+        location.href = 'menu.html';
+      }
+    });
+
+    // パスワード変更
+    changeBtn.addEventListener('click', async ()=>{
+      changeMsg.textContent = '';
+      const s = loadSess();
+      if (!(s && s.ok && s.exp > now())){
+        changeMsg.textContent = 'ログインが有効ではありません。再ログインしてください。';
+        changeMsg.className = 'msg warn';
+        return;
+      }
+      const v = (newPw.value || '').trim();
+      if (!v){
+        changeMsg.textContent = '新しいパスワードを入力してください。';
+        changeMsg.className = 'msg err';
+        return;
+      }
+      if (v.length < 4){
+        changeMsg.textContent = '4文字以上にしてください。';
+        changeMsg.className = 'msg err';
+        return;
+      }
+      try{
+        await set(ref(db, 'game/ownerPassword'), v);
+        changeMsg.textContent = 'パスワードを更新しました。';
+        changeMsg.className = 'msg ok';
+        newPw.value = '';
+      }catch(e){
+        console.error(e);
+        changeMsg.textContent = '更新に失敗しました（権限/ルールを確認してください）。';
+        changeMsg.className = 'msg err';
+      }
+    });
+  </script>
+</body>
+</html>
