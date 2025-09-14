@@ -3,12 +3,12 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>クリック中心に小さな画像を最大6個出す</title>
+  <title>重ならず・最大6個・中心固定</title>
   <style>
     :root{
       --bg-image: url('assets/sougen2.png');   /* 背景 */
       --panel-height: calc(100dvh * 5 / 9);    /* 下から 9分の5 がホットゾーン */
-      --img-size: clamp(72px, 12vmin, 140px);  /* 出す画像の“小さめ”サイズ */
+      --img-size: clamp(72px, 12vmin, 140px);  /* 小さめサイズ */
     }
 
     html, body { height: 100%; }
@@ -28,8 +28,7 @@
 
     /* クリックできる透明ゾーン（下 5/9） */
     .hotzone{
-      position: fixed;
-      left: 0; right: 0; bottom: 0;
+      position: fixed; left: 0; right: 0; bottom: 0;
       height: var(--panel-height);
       background: transparent;
       cursor: crosshair;
@@ -41,39 +40,40 @@
       outline-offset: -2px;
     }
 
-    /* 生成画像を載せる全画面オーバーレイ（座標はビューポート基準） */
+    /* 画像を配置する全画面オーバーレイ（座標はビューポート基準） */
     .overlay{
       position: fixed; inset: 0; z-index: 10;
-      pointer-events: none;   /* クリックは下のホットゾーンへ通す */
+      pointer-events: none;   /* クリックは下のゾーンへ通す */
       overflow: visible;      /* 画面外へ出てもOK */
     }
 
-    /* クリック位置を中心に置く小さな画像（閉じない） */
+    /* クリック位置を“中心”に置く小さな画像（非クリック・非削除） */
     .spawn{
       position: absolute;
-      left: 50%; top: 50%;                       /* 初期は中央 */
+      left: 50%; top: 50%;                        /* 初期は中央 */
       transform: translate(-50%, -50%) scale(.98);/* 中心合わせ */
       width: var(--img-size);
       height: auto; object-fit: contain;
       opacity: 0;
       transition: opacity 160ms ease, transform 160ms ease;
-      user-select: none; pointer-events: none;   /* 画像はクリック無効（貫通） */
+      user-select: none; pointer-events: none;    /* 画像自体は貫通 */
     }
     .spawn.show{
       opacity: 1;
       transform: translate(-50%, -50%) scale(1);
     }
 
-    /* 上限到達トースト */
+    /* トースト表示 */
     .toast{
       position: fixed; left: 50%; top: 18%;
       transform: translateX(-50%) translateY(-8px);
-      background: rgba(0,0,0,.6);
+      background: rgba(0,0,0,.65);
       color: #fff; padding: 10px 14px; border-radius: 12px;
       font-size: 14px; letter-spacing: .02em;
       backdrop-filter: blur(4px);
       opacity: 0; transition: opacity 160ms ease, transform 160ms ease;
       pointer-events: none; z-index: 20;
+      white-space: nowrap;
     }
     .toast.show{
       opacity: 1; transform: translateX(-50%) translateY(0);
@@ -90,44 +90,84 @@
   <!-- 画像を配置するオーバーレイ -->
   <div class="overlay" id="overlay" aria-hidden="true"></div>
 
-  <!-- 上限到達メッセージ -->
-  <div class="toast" id="toast">これ以上は出せません（最大6個）</div>
+  <!-- トースト -->
+  <div class="toast" id="toast"></div>
 
   <script>
     const zone    = document.getElementById('hotzone');
     const overlay = document.getElementById('overlay');
     const toast   = document.getElementById('toast');
 
-    const MAX = 6;
+    const IMG_SRC = 'assets/karai-kudamono.png';  // 画像
+    const MAX = 6;                                // 上限
     let count = 0;
     let toastTimer = null;
 
-    function showToast() {
+    // 先読みしておくと1枚目が速い
+    (new Image()).src = IMG_SRC;
+
+    function showToast(text = 'メッセージ') {
+      toast.textContent = text;
       toast.classList.add('show');
       clearTimeout(toastTimer);
-      toastTimer = setTimeout(() => toast.classList.remove('show'), 900);
+      toastTimer = setTimeout(() => toast.classList.remove('show'), 1000);
     }
 
-    // 画像を新規に1つ生成して (clientX, clientY) を中心に配置
+    // 軸平行矩形の当たり判定（重なるなら true）
+    function rectsOverlap(a, b) {
+      return (a.left < b.right &&
+              a.right > b.left &&
+              a.top < b.bottom &&
+              a.bottom > b.top);
+    }
+
+    // クリック位置 (clientX, clientY) を中心に、重なり無しで追加
     function spawnAt(clientX, clientY) {
-      if (count >= MAX) { showToast(); return; }
+      if (count >= MAX) { showToast('これ以上は出せません（最大6個）'); return; }
 
       const img = new Image();
-      img.src = 'assets/karai-kudamono.png';  /* 出す画像 */
+      img.src = IMG_SRC;
       img.alt = '出現画像';
       img.draggable = false;
       img.className = 'spawn';
 
-      // クリック位置を中心に（クランプ無し）
+      // クリック位置を“中心”に（クランプ無し）
       img.style.left = clientX + 'px';
       img.style.top  = clientY + 'px';
 
       overlay.appendChild(img);
 
-      // フェードイン
-      requestAnimationFrame(() => img.classList.add('show'));
+      // 画像読み込み後に実サイズが確定 → 重なり判定
+      img.addEventListener('load', () => {
+        // レイアウト確定を待ってから判定
+        requestAnimationFrame(() => {
+          const cand = img.getBoundingClientRect();
+          let overlap = false;
 
-      count++;
+          // 既存の表示済み画像とAABB判定
+          const existing = overlay.querySelectorAll('.spawn.show');
+          for (const el of existing) {
+            const r = el.getBoundingClientRect();
+            if (rectsOverlap(cand, r)) { overlap = true; break; }
+          }
+
+          if (overlap) {
+            img.remove();                   // 追加しない
+            showToast('そこには置けません（重なります）');
+            return;
+          }
+
+          // 問題なければ表示
+          img.classList.add('show');
+          count++;
+        });
+      });
+
+      // 読み込み失敗時は要素を捨てる
+      img.addEventListener('error', () => {
+        img.remove();
+        showToast('画像の読み込みに失敗しました');
+      });
     }
 
     // 透明ゾーンのクリックで生成
@@ -135,7 +175,7 @@
       spawnAt(e.clientX, e.clientY);
     });
 
-    // キーボード操作：Enter/Spaceでゾーン中央、Escは何もしない
+    // キーボード操作：Enter/Spaceでゾーン中央を試す
     zone.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
