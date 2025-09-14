@@ -429,7 +429,7 @@ function renderInventory(){
     rowCtrl.querySelector('.btnStore').addEventListener('click', async ()=>{
       if (window.firebaseDB){
         const { db, ref, push } = window.firebaseDB;
-        await push(ref(db, "warehouse/team1"), { name, count:1, ts:Date.now() });
+        await push(ref(db, "warehouse/team1"), { item:name, count:1, ts:Date.now() });
         // インベントリから1つ減らす
         inventory.total = Math.max(0, inventory.total - 1);
         inventory.byName[name] = Math.max(0, (inventory.byName[name]||0) - 1);
@@ -572,6 +572,7 @@ function addHarvestToInv({ name }){
 
 </body>
 </html>
+
 
 
 
