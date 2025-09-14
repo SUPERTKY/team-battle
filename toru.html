@@ -194,22 +194,34 @@ seedButtons.forEach(btn => {
 const SEEDS = [
   {
     key: 'spicy', label: '辛果',
-    // 3段階の画像（とりあえず既存画像にしておく。差し替えOK）
     stages: ['assets/karai-kudamono.png','assets/karai-kudamono.png','assets/karai-kudamono.png'],
-    // 進化時間（ms）：[第1→第2, 第2→第3]
-    growMs: [4000, 6000]
+    growMs: [4000, 6000],
+    // ★ 収穫時に落とす素材（例）
+    drops: [
+      { name:'辛み粉',  min:1, max:2, chance:1   }, // 必ず1〜2個
+      { name:'種殻',    min:0, max:1, chance:0.5 }  // 50%で0〜1個
+    ]
   },
   {
     key: 'berry', label: '木の実',
     stages: ['assets/berry.png','assets/berry.png','assets/berry.png'],
-    growMs: [3000, 5000]
+    growMs: [3000, 5000],
+    drops: [
+      { name:'果汁',    min:1, max:2, chance:0.8 },
+      { name:'小枝',    qty:1,           chance:0.4 }
+    ]
   },
   {
     key: 'bean', label: '豆',
     stages: ['assets/bean.png','assets/bean.png','assets/bean.png'],
-    growMs: [2000, 4000]
+    growMs: [2000, 4000],
+    drops: [
+      { name:'豆さや',  min:1, max:3, chance:1   },
+      '豆の葉' // 文字だけなら1個固定で落ちます
+    ]
   },
 ];
+
 let currentSeedKey = SEEDS[0].key;
 const getSeed = (k) => SEEDS.find(s => s.key === k) || SEEDS[0];
 
@@ -243,6 +255,14 @@ function circlesOverlap(a, b){
   const dx = ax - bx, dy = ay - by;
   return (dx*dx + dy*dy) < (ar + br) * (ar + br);
 }
+// ★ overlayクリックで植える（画像をクリックした時は除外）
+overlay.addEventListener('click', (e) => {
+  if (e.target !== overlay) return;             // 画像クリックは harvest へ
+  const zr = zone.getBoundingClientRect();      // 下 5/9 の位置
+  if (e.clientY >= zr.top) {                     // ホットゾーン内だけ
+    spawnAt(e.clientX, e.clientY);
+  }
+});
 
 function applyStage(imgEl, seed, stageIndex){
   const idx = Math.max(0, Math.min(2, stageIndex|0)); // 0..2
@@ -456,26 +476,70 @@ function harvestPlant(imgEl){
   const seed = getSeed(imgEl.dataset.seedKey || currentSeedKey);
   const name = (seed && seed.label) ? seed.label : (seed?.key || '作物');
 
-  // インベントリに追加（満杯なら中断）
-  const ok = addHarvestToInv({ name, seedKey: seed?.key });
-  if (!ok) return;
+  // まず作物自体を +1
+  if (!addHarvestToInv({ name })) return;
+
+  // 次に“ドロップ素材”をロールして追加
+  const drops = rollDrops(seed);
+  for (const d of drops){
+    if (!addItemToInv(d.name, d.qty)) break; // 満杯なら中断
+  }
 
   // 収穫アニメ＆削除
   imgEl.classList.remove('harvestable');
   imgEl.style.transition = 'opacity 160ms ease, transform 160ms ease';
   imgEl.style.opacity = '0';
   imgEl.style.transform = 'translate(-50%,-50%) scale(.85)';
-  setTimeout(() => {
-    if (imgEl.parentNode) imgEl.parentNode.removeChild(imgEl);
-  }, 170);
+  setTimeout(() => { if (imgEl.parentNode) imgEl.parentNode.removeChild(imgEl); }, 170);
 
   // 配置カウントを戻す（新たに植えられるように）
   count = Math.max(0, count - 1);
 }
 
+// ★ ランダム整数
+function randInt(a,b){ return Math.floor(Math.random()*(b-a+1))+a; }
+
+// ★ ドロップを展開
+function rollDrops(seed){
+  const out = [];
+  const ds = seed.drops || [];
+  for (const d of ds){
+    if (typeof d === 'string'){ out.push({ name:d, qty:1 }); continue; }
+    const name   = d.name || '素材';
+    const chance = (typeof d.chance === 'number') ? d.chance : 1;
+    if (Math.random() > chance) continue;
+    const qty = ('qty' in d) ? d.qty : randInt(d.min ?? 1, d.max ?? 1);
+    if (qty > 0) out.push({ name, qty });
+  }
+  return out;
+}
+
+// ★ 任意アイテムを複数個追加（上限チェック込み）
+function addItemToInv(name, qty=1){
+  for (let i=0; i<qty; i++){
+    if (inventory.total >= INV_LIMIT){
+      showToast("インベントリがいっぱいです");
+      return false;
+    }
+    inventory.total++;
+  }
+  inventory.byName[name] = (inventory.byName[name] || 0) + qty;
+  saveInv();
+  renderInventory();
+  return true;
+}
+
+// 既存の addHarvestToInv を“収穫1個専用＋トースト”にして利用
+function addHarvestToInv({ name }){
+  const ok = addItemToInv(name, 1);
+  if (ok) showToast(`+1 ${name} を収穫！`);
+  return ok;
+}
+
   </script>
 </body>
 </html>
+
 
 
 
