@@ -195,7 +195,7 @@ function initMenu(){
     { name: "釣り",   desc: "移動", href: "turi.html",    icon: "🎣", key: "1" },
     { name: "狩り",   desc: "移動", href: "kari.html",    icon: "🦌", key: "2" },
     { name: "採取",   desc: "移動", href: "toru.html",    icon: "🍄", key: "3" },
-    { name: "注文",   desc: "移動", href: "tyuumon.html", icon: "🧾", key: "4" }, /* ★追加 */
+    { name: "注文",   desc: "移動", href: `tyuumon.html${selectedTeamNumber ? `?team=${selectedTeamNumber}` : ""}`, icon: "🧾", key: "4" },
     { name: "オーナー", desc: "管理", href: "o-na-.html",  icon: "👑", key: "5" },
   ];
 
@@ -302,12 +302,12 @@ function initMenu(){
   document.querySelectorAll(".teamBtn").forEach(btn=>{
     btn.addEventListener("click", ()=>{
       userState.team = btn.dataset.team;
-
+    localStorage.setItem('selected_team', 'team' + userState.team);
       // ここで保存したければ set(...) などを入れる
       // set(ref(db, "players/"+userId), userState);
 
       // 役職ステップは無くし、メニューへ
-      initMenu();
+      initMenu(userState.team);
       document.getElementById("step-team").classList.add("hidden");
       document.getElementById("step-menu").classList.remove("hidden");
     });
@@ -316,4 +316,5 @@ function initMenu(){
 
 </body>
 </html>
+
 
