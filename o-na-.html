@@ -74,7 +74,7 @@
 
     .list{ margin-top:10px; border:1px solid var(--border); border-radius:14px; overflow:hidden }
     .thead, .trow{
-      display:grid; grid-template-columns: 140px 200px 1fr 220px 140px;
+      display:grid; grid-template-columns: 90px 120px 160px 1fr 200px 140px;
       gap:8px; align-items:center; padding:10px 12px;
     }
     .thead{ background: rgba(255,255,255,.08); font-weight:800 }
@@ -99,23 +99,22 @@
       <p class="help">※ Realtime Database の <code>game/ownerPassword</code> と一致した場合のみ入室できます。</p>
     </section>
 
-    <!-- 注文ダッシュボード（簡潔版） -->
+    <!-- 注文ダッシュボード -->
     <section id="dashCard" class="card hidden" aria-labelledby="dashTitle">
       <h1 id="dashTitle" class="title">注文ダッシュボード</h1>
-      <p class="sub">料理を選んで注文を作成します。素材や種類はコードの定義から自動で保存されます。</p>
+      <p class="sub">料理を選ぶと、全チーム（1〜4）へ同じ注文を一括で出します。</p>
 
       <div class="grid">
-
         <!-- 左：注文作成（料理選択のみ） -->
         <div class="panel">
-          <h3>注文を作成</h3>
+          <h3>注文を作成（全チームへ）</h3>
           <div class="col">
             <label for="dishSelect">料理を選択</label>
             <select id="dishSelect" class="input"></select>
             <div id="dishPreview" class="muted"></div>
           </div>
           <div class="row" style="margin-top:12px;">
-            <button id="createOrderBtn" class="btn primary">注文を作成</button>
+            <button id="createOrderBtn" class="btn primary">注文を全チームに出す</button>
             <div id="createMsg" class="msg" role="status" aria-live="polite"></div>
           </div>
           <p class="help">※ 料理リストと素材・注文の種類はファイル内の <code>DISH_MASTER</code> を編集してください。</p>
@@ -131,14 +130,23 @@
             <button id="backBtn" class="btn neutral">戻る</button>
           </div>
         </div>
-
       </div>
 
-      <!-- 注文一覧（閲覧＋削除のみ） -->
+      <!-- 一括操作 -->
+      <div class="panel" style="margin-top:14px;">
+        <h3>一括操作</h3>
+        <div class="row">
+          <button id="clearAllBtn" class="btn warn">注文帳消し（全チーム）</button>
+          <div id="bulkMsg" class="msg" role="status" aria-live="polite"></div>
+        </div>
+        <p class="help">※ 全チームの <code>game/orders/team*</code> を空にします。</p>
+      </div>
+
+      <!-- 注文一覧（チーム別表示） -->
       <div class="panel" style="margin-top:16px;">
-        <h3>注文一覧</h3>
+        <h3>注文一覧（チーム別）</h3>
         <div class="thead">
-          <div>ID</div><div>種類</div><div>ステータス（料理名 / 素材）</div><div>作成</div><div>操作</div>
+          <div>チーム</div><div>ID</div><div>種類</div><div>ステータス（料理名 / 素材）</div><div>作成</div><div>操作</div>
         </div>
         <div id="ordersList" class="list"></div>
         <div id="listMsg" class="msg muted"></div>
@@ -149,17 +157,18 @@
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
-    import { getDatabase, ref, child, get, push, onValue, remove } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js";
+    import {
+      getDatabase, ref, child, get, push, onValue, remove
+    } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js";
 
     // ======== ★ここを編集：料理一覧＆素材・注文種類（コード側で管理） ========
-    // key: 表示名（ユニーク推奨）
+    // key: 料理名
     // value: { type: "注文の種類", materials: ["素材1","素材2",...] }
     const DISH_MASTER = {
       "キノコのクリームパスタ": { type: "通常注文", materials: ["キノコ","乳","小麦","塩"] },
-      "焼き魚定食":           { type: "通常注文", materials: ["魚","米","塩"] },
-      "ハーブスープ":           { type: "特急注文", materials: ["野菜","ハーブ","塩","水"] },
-      // ここに追加していく ↓
-      // "○○○": { type: "イベント注文", materials: ["A","B"] },
+      "焼き魚定食":            { type: "通常注文", materials: ["魚","米","塩"] },
+      "ハーブスープ":            { type: "特急注文", materials: ["野菜","ハーブ","塩","水"] },
+      // 追加…
     };
     // ===============================================================
 
@@ -189,6 +198,9 @@
     const createOrderBtn= document.getElementById('createOrderBtn');
     const createMsg     = document.getElementById('createMsg');
 
+    const clearAllBtn   = document.getElementById('clearAllBtn');
+    const bulkMsg       = document.getElementById('bulkMsg');
+
     const sessState = document.getElementById('sessState');
     const sessExp   = document.getElementById('sessExp');
     const logoutBtn = document.getElementById('logoutBtn');
@@ -209,7 +221,7 @@
     const showDash = ()=>{ loginCard.classList.add('hidden'); dashCard.classList.remove('hidden'); };
     const showLogin= ()=>{ dashCard.classList.add('hidden'); loginCard.classList.remove('hidden'); };
 
-    // 起動：料理リスト→セッション確認
+    // 起動：料理リスト→セッション確認→購読開始
     (function boot(){
       // 料理プルダウン描画
       const names = Object.keys(DISH_MASTER).sort((a,b)=> a.localeCompare(b,'ja'));
@@ -228,6 +240,12 @@
       const s = loadSess();
       if (s && s.ok && s.exp > now()){ updateSessUI(s); showDash(); }
       else { clearSess(); showLogin(); }
+
+      // 注文購読（チーム別）
+      onValue(ref(db, 'game/orders'), (snap)=>{
+        const val = snap.exists()? snap.val() : null;
+        renderOrders(val);
+      });
     })();
 
     function updateDishPreview(){
@@ -272,7 +290,7 @@
     logoutBtn.addEventListener('click', ()=>{ clearSess(); updateSessUI(null); showLogin(); });
     backBtn.addEventListener('click', ()=>{ if (document.referrer) history.back(); else location.href='menu.html'; });
 
-    // 注文作成（料理選ぶだけ）
+    // 注文作成（全チームへ同報）
     createOrderBtn.addEventListener('click', async ()=>{
       createMsg.textContent = '';
       const s = loadSess();
@@ -290,48 +308,73 @@
       };
 
       try{
-        await push(ref(db, 'game/orders'), payload);
-        createMsg.textContent='注文を作成しました。'; createMsg.className='msg ok';
+        const teams = ['team1','team2','team3','team4'];
+        await Promise.all(teams.map(t => push(ref(db, `game/orders/${t}`), payload)));
+        createMsg.textContent='4チームに注文を出しました。'; createMsg.className='msg ok';
       }catch(e){
         console.error(e); createMsg.textContent='作成に失敗しました（権限/ルールを確認）。'; createMsg.className='msg err';
       }
     });
 
-    // 注文一覧（閲覧＋削除のみ）
-    function renderOrders(map){
-      ordersList.innerHTML = '';
-      const entries = map ? Object.entries(map) : [];
-      if (entries.length === 0){ listMsg.textContent='注文はまだありません。'; return; }
-      listMsg.textContent = '';
-
-      entries.sort((a,b)=> (b[1]?.createdAt||0) - (a[1]?.createdAt||0));
-      for (const [id, o] of entries){
-        const row = document.createElement('div'); row.className='trow';
-        const idEl   = document.createElement('div'); idEl.textContent = id.slice(-6);
-        const typeEl = document.createElement('div'); typeEl.textContent = o.type || '—';
-
-        const statusEl = document.createElement('div');
-        const dishSpan = document.createElement('div'); dishSpan.innerHTML = `<b>${o?.status?.dish || '—'}</b>`;
-        const matsSpan = document.createElement('div'); matsSpan.className='muted';
-        matsSpan.textContent = (o?.status?.materials||[]).join('、') || '—';
-        statusEl.appendChild(dishSpan); statusEl.appendChild(matsSpan);
-
-        const timeEl = document.createElement('div'); timeEl.className='muted'; timeEl.textContent = fmt(o.createdAt);
-
-        const actEl = document.createElement('div'); actEl.className='actions';
-        const delBtn = document.createElement('button'); delBtn.className='btn warn'; delBtn.textContent='削除';
-        actEl.appendChild(delBtn);
-
-        row.appendChild(idEl); row.appendChild(typeEl); row.appendChild(statusEl); row.appendChild(timeEl); row.appendChild(actEl);
-        ordersList.appendChild(row);
-
-        delBtn.addEventListener('click', async ()=>{
-          if (!confirm('この注文を削除しますか？')) return;
-          try{ await remove(ref(db, 'game/orders/'+id)); }catch(e){ console.error(e); alert('削除に失敗しました。'); }
-        });
+    // 注文帳消し（全チーム）
+    clearAllBtn.addEventListener('click', async ()=>{
+      bulkMsg.textContent = '';
+      const s = loadSess();
+      if (!(s && s.ok && s.exp > now())){ bulkMsg.textContent='ログイン有効期限が切れています。'; bulkMsg.className='msg warn'; return; }
+      if (!confirm('本当に全チームの注文を帳消し（削除）しますか？')) return;
+      try{
+        await remove(ref(db, 'game/orders')); // 親を丸ごと消す → team1..4 も消える
+        bulkMsg.textContent = '全チームの注文を帳消しにしました。'; bulkMsg.className='msg ok';
+      }catch(e){
+        console.error(e); bulkMsg.textContent='帳消しに失敗しました。'; bulkMsg.className='msg err';
       }
+    });
+
+    // 注文一覧（チーム別）
+    function renderOrders(root){
+      ordersList.innerHTML = '';
+      const teams = ['team1','team2','team3','team4'];
+      let total = 0;
+
+      teams.forEach(team=>{
+        const map = root?.[team] || null;
+        const entries = map ? Object.entries(map) : [];
+        // 新しい順
+        entries.sort((a,b)=> (b[1]?.createdAt||0) - (a[1]?.createdAt||0));
+        entries.forEach(([id, o])=>{
+          total++;
+          const row = document.createElement('div'); row.className='trow';
+
+          const teamEl = document.createElement('div'); teamEl.textContent = team.toUpperCase().replace('TEAM','チーム');
+          const idEl   = document.createElement('div'); idEl.textContent = id.slice(-6);
+          const typeEl = document.createElement('div'); typeEl.textContent = o.type || '—';
+
+          const statusEl = document.createElement('div');
+          const dishSpan = document.createElement('div'); dishSpan.innerHTML = `<b>${o?.status?.dish || '—'}</b>`;
+          const matsSpan = document.createElement('div'); matsSpan.className='muted';
+          matsSpan.textContent = (o?.status?.materials||[]).join('、') || '—';
+          statusEl.appendChild(dishSpan); statusEl.appendChild(matsSpan);
+
+          const timeEl = document.createElement('div'); timeEl.className='muted'; timeEl.textContent = fmt(o.createdAt);
+
+          const actEl = document.createElement('div'); actEl.className='actions';
+          const delBtn = document.createElement('button'); delBtn.className='btn warn'; delBtn.textContent='削除';
+          actEl.appendChild(delBtn);
+
+          row.appendChild(teamEl); row.appendChild(idEl); row.appendChild(typeEl); row.appendChild(statusEl); row.appendChild(timeEl); row.appendChild(actEl);
+          ordersList.appendChild(row);
+
+          // 個別削除
+          delBtn.addEventListener('click', async ()=>{
+            if (!confirm(`この注文（${team} / ${id.slice(-6)}）を削除しますか？`)) return;
+            try{ await remove(ref(db, `game/orders/${team}/${id}`)); }
+            catch(e){ console.error(e); alert('削除に失敗しました。'); }
+          });
+        });
+      });
+
+      listMsg.textContent = total === 0 ? '注文はまだありません。' : `合計 ${total} 件`;
     }
-    onValue(ref(db, 'game/orders'), (snap)=> renderOrders(snap.exists()? snap.val(): null));
   </script>
 </body>
 </html>
