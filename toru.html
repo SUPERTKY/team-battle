@@ -554,7 +554,6 @@ function addHarvestToInv({ name }){
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
   import { getDatabase, ref, push, onValue } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js";
-  import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
 
   // ★必ず databaseURL を入れる！
   const firebaseConfig = {
@@ -567,17 +566,13 @@ function addHarvestToInv({ name }){
     appId: "1:409885673101:web:25bf0483547e2d470304c4"
   };
 
-  const app  = initializeApp(firebaseConfig);
-  const db   = getDatabase(app);
-  const auth = getAuth(app);
+  const app = initializeApp(firebaseConfig);
+  const db  = getDatabase(app);
 
-  const ready = new Promise((resolve) => onAuthStateChanged(auth, (user)=>resolve(user)));
-  signInAnonymously(auth).catch(console.error);
+  // 他スクリプトが使うために公開（Authは載せない）
+  window.firebaseDB = { db, ref, push, onValue };
 
-  // 他スクリプトが使うために公開
-  window.firebaseDB = { db, ref, push, onValue, auth, ready };
-
-  /* === 一時停止フック（あなたのコードのまま） === */
+  /* === 一時停止フック（DBのみでOK） === */
   (function installGlobalPause(db){
     let paused = false;
     const overlay = document.createElement('div');
@@ -614,8 +609,10 @@ function addHarvestToInv({ name }){
 
 
 
+
 </body>
 </html>
+
 
 
 
