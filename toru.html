@@ -552,31 +552,34 @@ function addHarvestToInv({ name }){
 
   </script>
 <script type="module">
-  import { initializeApp }      from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
- // ★ onValue を追加
-import { getDatabase, ref, push, onValue } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js";
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
+  import { getDatabase, ref, push, onValue } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js";
+  import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
 
-  import { getAuth, signInAnonymously, onAuthStateChanged }
-         from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
-
-  const firebaseConfig = { /* 省略 */ };
+  // ★必ず databaseURL を入れる！
+  const firebaseConfig = {
+    apiKey: "AIzaSyDPe5cSCavq5gHopugdOfQ-9_50cTrqmyk",
+    authDomain: "school-178c2.firebaseapp.com",
+    databaseURL: "https://school-178c2-default-rtdb.europe-west1.firebasedatabase.app",
+    projectId: "school-178c2",
+    storageBucket: "school-178c2.firebasestorage.app",
+    messagingSenderId: "409885673101",
+    appId: "1:409885673101:web:25bf0483547e2d470304c4"
+  };
 
   const app  = initializeApp(firebaseConfig);
   const db   = getDatabase(app);
   const auth = getAuth(app);
 
-  const ready = new Promise((resolve) => {
-    onAuthStateChanged(auth, (user) => resolve(user));
-  });
+  const ready = new Promise((resolve) => onAuthStateChanged(auth, (user)=>resolve(user)));
   signInAnonymously(auth).catch(console.error);
 
-  // 既存の倉庫連携を他スクリプトから使えるように
-  window.firebaseDB = { db, ref, push, auth, ready };
+  // 他スクリプトが使うために公開
+  window.firebaseDB = { db, ref, push, onValue, auth, ready };
 
-  /* === ここから：一時停止フック（コピペ） === */
+  /* === 一時停止フック（あなたのコードのまま） === */
   (function installGlobalPause(db){
     let paused = false;
-
     const overlay = document.createElement('div');
     overlay.style.cssText = `
       position:fixed; inset:0; display:none; z-index:99999;
@@ -595,30 +598,25 @@ import { getDatabase, ref, push, onValue } from "https://www.gstatic.com/firebas
     onValue(ref(db, 'game/control/state'), (snap)=>{
       const s = snap.exists()? snap.val(): null;
       paused = !!(s && s.paused);
-      if (paused){
-        msgEl.textContent = s?.message || 'オーナーが一時停止しました';
-        overlay.style.display = 'flex';
-      }else{
-        overlay.style.display = 'none';
-      }
+      overlay.style.display = paused ? 'flex' : 'none';
+      if (paused) msgEl.textContent = s?.message || 'オーナーが一時停止しました';
     });
 
-    // フォールバック：入力も捕捉段階で止める
     const block = (e)=>{ if (paused){ e.stopPropagation(); e.preventDefault(); } };
     ['click','mousedown','mouseup','touchstart','touchend','keydown','keyup','pointerdown','pointerup']
       .forEach(t=> document.addEventListener(t, block, true));
 
-    // 主要アクションで呼ぶガード
     window.assertNotPaused = function(){
       if (paused) throw new Error('PAUSED');
     };
   })(db);
-  /* === ここまで === */
 </script>
+
 
 
 </body>
 </html>
+
 
 
 
