@@ -140,6 +140,15 @@
           <button id="clearAllBtn" class="btn warn">注文帳消し（全チーム）</button>
           <div id="bulkMsg" class="msg" role="status" aria-live="polite"></div>
         </div>
+        <div class="panel" style="margin-top:14px;">
+  <h3>グローバル一時停止</h3>
+  <div class="row">
+    <button id="pauseBtn" class="btn warn">全ページを一時停止</button>
+    <button id="resumeBtn" class="btn primary">一時停止を解除</button>
+  </div>
+  <div class="help">※ 釣り/狩り/採取/注文など、全てのプレイ画面が操作不可になります。</div>
+  <div id="pauseStateMsg" class="msg"></div>
+</div>
 
       </div>
 
@@ -152,15 +161,22 @@
         <div id="ordersList" class="list"></div>
         <div id="listMsg" class="msg muted"></div>
       </div>
+      <!-- チームポイント -->
+<div class="panel" style="margin-top:14px;">
+  <h3>チームポイント</h3>
+  <div id="pointsList" class="row" style="gap:16px; flex-wrap:wrap;"></div>
+</div>
+
     </section>
 
   </main>
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
-    import {
-      getDatabase, ref, child, get, push, onValue, remove
-    } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js";
+   import {
+  getDatabase, ref, child, get, push, onValue, remove, set
+} from "https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js";
+
 
     // ======== ★ここを編集：料理名 → 素材配列（種類は廃止） ========
     const DISH_MASTER = {
@@ -219,6 +235,40 @@
     const updateSessUI = (s)=>{ if(s&&s.ok){ sessState.textContent='ログイン中'; sessExp.textContent=fmt(s.exp) } else { sessState.textContent='未ログイン'; sessExp.textContent='—' } };
     const showDash = ()=>{ loginCard.classList.add('hidden'); dashCard.classList.remove('hidden'); };
     const showLogin= ()=>{ dashCard.classList.add('hidden'); loginCard.classList.remove('hidden'); };
+    const pauseBtn = document.getElementById('pauseBtn');
+const resumeBtn = document.getElementById('resumeBtn');
+const pauseStateMsg = document.getElementById('pauseStateMsg');
+
+function controlRef(){ return ref(db, 'game/control/state'); }
+
+// 状態を監視（UIに現在の一時停止状況を出す）
+onValue(controlRef(), (snap)=>{
+  const s = snap.exists()? snap.val(): null;
+  const paused = !!(s && s.paused);
+  pauseStateMsg.textContent = paused ? `一時停止中：${s?.message||''}`.trim() : '稼働中';
+  pauseStateMsg.className = 'msg ' + (paused ? 'warn' : 'ok');
+});
+
+// 押下でON
+pauseBtn.addEventListener('click', async ()=>{
+  const s = loadSess();
+  if (!(s && s.ok && s.exp > now())){ alert('ログイン期限切れ'); return; }
+  const msg = prompt('一時停止メッセージ（任意）', 'オーナーが一時停止しました');
+  try{
+    await set(controlRef(), { paused:true, message: String(msg||''), updatedAt: Date.now() });
+    alert('全ページを一時停止にしました');
+  }catch(e){ console.error(e); alert('設定に失敗しました'); }
+});
+
+// 押下でOFF
+resumeBtn.addEventListener('click', async ()=>{
+  const s = loadSess();
+  if (!(s && s.ok && s.exp > now())){ alert('ログイン期限切れ'); return; }
+  try{
+    await set(controlRef(), { paused:false, message:'', updatedAt: Date.now() });
+    alert('一時停止を解除しました');
+  }catch(e){ console.error(e); alert('解除に失敗しました'); }
+});
 
     // 起動：料理リスト→セッション確認→購読開始
     (function boot(){
@@ -241,10 +291,19 @@
       else { clearSess(); showLogin(); }
 
       // 注文購読（チーム別）
-      onValue(ref(db, 'game/orders'), (snap)=>{
-        const val = snap.exists()? snap.val() : null;
-        renderOrders(val);
-      });
+// 既存：注文の購読
+onValue(ref(db, 'game/orders'), (snap)=>{
+  const val = snap.exists()? snap.val() : null;
+  renderOrders(val);
+});
+
+// ★追加：ポイントの購読
+onValue(ref(db, 'game/points'), (snap)=>{
+  const val = snap.exists()? snap.val() : {};
+  renderPoints(val);
+});
+
+      
     })();
 
     function updateDishPreview(){
@@ -372,9 +431,24 @@
 
       listMsg.textContent = total === 0 ? '注文はまだありません。' : `合計 ${total} 件`;
     }
+    const pointsList = document.getElementById('pointsList');
+
+function renderPoints(map){
+  pointsList.innerHTML = '';
+  ['team1','team2','team3','team4'].forEach(t=>{
+    const v = map?.[t] ?? 0;
+    const pill = document.createElement('div');
+    pill.className = 'btn neutral';
+    pill.style.cursor = 'default';
+    pill.textContent = `${t.toUpperCase().replace('TEAM','チーム')}：${v}`;
+    pointsList.appendChild(pill);
+  });
+}
+
   </script>
 </body>
 </html>
+
 
 
 
