@@ -3,87 +3,110 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>背景＋下4/9パネル</title>
+  <title>透明ホットゾーン → 画像表示</title>
   <style>
-    /* ====== 設定（背景画像の場所） ====== */
     :root{
-      --bg-image: url('assets/sougen2.png'); /* ここを差し替え */
-     --panel-height: calc(100dvh * 5 / 9); /* 下から 9分の5 の高さ */
-      --panel-bg: rgba(12, 18, 24, 0.38);       /* 半透明（お好みで） */
-      --panel-radius: 18px;
-      --panel-pad: clamp(12px, 2.4vmin, 24px);
+      --bg-image: url('assets/sougen2.png'); /* 背景（差し替えOK） */
+      --panel-height: calc(100dvh * 5 / 9);     /* 下から 9分の5 の高さ */
     }
 
-    /* ====== 全体レイアウト ====== */
-    html, body {
-      height: 100%;
-    }
+    html, body { height: 100%; }
     body{
       margin: 0;
       min-height: 100dvh;
-      background-image: var(--bg-image);
-      background-size: cover;
-      background-position: center;
-      background-repeat: no-repeat;
-      background-attachment: fixed; /* 好みで外してOK */
+      background: var(--bg-image) center / cover no-repeat fixed;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, "Noto Sans JP", Meiryo, sans-serif;
       color: #fff;
-      font-family: system-ui, -apple-system, Segoe UI, Roboto, "Hiragino Kaku Gothic ProN",
-                   "Noto Sans JP", Meiryo, sans-serif;
     }
 
-    /* 画面全面にうっすらグラデーション（文字の可読性UP用・不要なら削除） */
+    /* うっすらスクリーン（不要なら削除） */
     .scrim{
-      position: fixed;
-      inset: 0;
+      position: fixed; inset: 0;
       pointer-events: none;
-      background: linear-gradient(to top, rgba(0,0,0,0.25), transparent 40%);
+      background: linear-gradient(to top, rgba(0,0,0,.25), transparent 40%);
     }
 
-    /* ====== 下パネル（4/9） ====== */
-    .bottom-panel{
+    /* ===== 透明のクリックゾーン（四角） =====
+       完全透明だが、クリックは取れる。 */
+    .hotzone{
       position: fixed;
       left: 0; right: 0; bottom: 0;
       height: var(--panel-height);
-      background: var(--panel-bg);
-      backdrop-filter: blur(6px);
-      -webkit-backdrop-filter: blur(6px);
-      border-top-left-radius: var(--panel-radius);
-      border-top-right-radius: var(--panel-radius);
-      border-top: 1px solid rgba(255,255,255,0.14);
-      box-shadow: 0 -20px 60px rgba(0,0,0,0.28);
-      padding: var(--panel-pad);
-      padding-bottom: calc(env(safe-area-inset-bottom, 0px) + var(--panel-pad));
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
+      background: transparent;            /* 透明で見えない */
+      border: none;
+      cursor: pointer;                    /* クリックできる雰囲気だけ出す */
+      /* 視覚的な枠が欲しいときだけ開発用に表示：
+         outline: 1px dashed rgba(255,255,255,.25); */
     }
 
-    /* 中身の例（好きに消してOK） */
-    .panel-title{
-      margin: 0;
-      font-size: clamp(18px, 2.8vmin, 24px);
-      font-weight: 700;
+    /* 画像を乗せるレイヤ（ホットゾーンの上に重ねる） */
+    .reveal-layer{
+      position: fixed;
+      left: 0; right: 0; bottom: 0;
+      height: var(--panel-height);
+      display: grid;
+      place-items: center;  /* 中央寄せ */
+      pointer-events: none; /* 画像表示前はクリックを通す */
     }
-    .panel-text{
-      margin: 0;
-      line-height: 1.6;
-      opacity: .95;
-      font-size: clamp(14px, 2.2vmin, 16px);
+
+    /* 表示する画像（最初は非表示） */
+    .reveal-img{
+      max-width: min(92vw, 900px);
+      max-height: calc(var(--panel-height) - 24px);
+      width: auto; height: auto;
+      object-fit: contain;
+      opacity: 0;
+      transform: translateY(8px);
+      transition: opacity 220ms ease, transform 220ms ease;
+      pointer-events: auto; /* 表示後はクリック可能（閉じる用） */
+      user-select: none;
+    }
+    .reveal-img.show{
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    /* キーボード操作でのアクセシビリティ */
+    .hotzone:focus-visible{
+      outline: 2px dashed rgba(255,255,255,.6);
+      outline-offset: -2px;
     }
   </style>
 </head>
 <body>
-  <!-- 背景の上にうっすら暗くするスクリーン（不要なら削除） -->
   <div class="scrim"></div>
 
-  <!-- 下から 9分の4 の半透明四角パネル -->
-  <section class="bottom-panel" role="region" aria-label="下部パネル">
-    <h1 class="panel-title">ここにUIやテキストを置けます</h1>
-    <p class="panel-text">
-      パネルの高さは画面の <strong>4/9</strong> に固定。画像は <code>assets/background.jpg</code> を読み込みます。<br>
-      画像を変える場合は <code>:root { --bg-image: url('assets/◯◯'); }</code> を差し替えてください。
-    </p>
-  </section>
+  <!-- クリックすると画像が出る透明の四角（見えない） -->
+  <div class="hotzone" id="hotzone" role="button" tabindex="0"
+       aria-label="画像を表示（下部の透明ゾーン）"></div>
+
+  <!-- 画像を重ねる層（クリック後にフェードイン） -->
+  <div class="reveal-layer" aria-hidden="true">
+    <img id="revealImg" class="reveal-img" src="assets/karai-kudamono.png" alt="表示画像">
+  </div>
+
+  <script>
+    const zone = document.getElementById('hotzone');
+    const img  = document.getElementById('revealImg');
+    let shown = false;
+
+    function toggle(show) {
+      if (show === undefined) show = !shown;
+      shown = show;
+      img.classList.toggle('show', shown);
+    }
+
+    // 透明ゾーンをクリック / Enter / Space でトグル
+    zone.addEventListener('click', () => toggle());
+    zone.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        toggle();
+      }
+    });
+
+    // 画像クリックで閉じる（任意）
+    img.addEventListener('click', () => toggle(false));
+  </script>
 </body>
 </html>
-
