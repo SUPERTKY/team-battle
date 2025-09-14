@@ -150,6 +150,50 @@
     };
     const app = initializeApp(firebaseConfig);
     const db  = getDatabase(app);
+  // === グローバル一時停止フック ===
+(function installGlobalPause(db){
+  let paused = false;
+
+  // 画面オーバーレイ
+  const overlay = document.createElement('div');
+  overlay.style.cssText = `
+    position:fixed; inset:0; display:none; z-index:99999;
+    backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+    background: rgba(0,0,0,.65); color:#fff;
+    font:600 18px/1.4 system-ui,-apple-system,"Noto Sans JP",sans-serif;
+    align-items:center; justify-content:center; text-align:center; padding:24px;
+  `;
+  overlay.innerHTML = `
+    <div style="max-width:740px;">
+      <div style="font-size:22px; margin-bottom:8px;">一時停止中</div>
+      <div id="__pauseMsg" style="opacity:.9;"></div>
+    </div>`;
+  document.body.appendChild(overlay);
+  const msgEl = overlay.querySelector('#__pauseMsg');
+
+  // 状態購読（オーナー画面で set するノード）
+  onValue(ref(db, 'game/control/state'), (snap)=>{
+    const s = snap.exists()? snap.val(): null;
+    paused = !!(s && s.paused);
+    if (paused){
+      msgEl.textContent = s?.message || 'オーナーが一時停止しました';
+      overlay.style.display = 'flex';
+    }else{
+      overlay.style.display = 'none';
+    }
+  });
+
+  // 入力をまとめてブロック（キャプチャ段階）
+  const block = (e)=>{ if (paused){ e.stopPropagation(); e.preventDefault(); } };
+  ['click','mousedown','mouseup','touchstart','touchend','keydown','keyup','pointerdown','pointerup'].forEach(t=>{
+    document.addEventListener(t, block, true);
+  });
+
+  // アクション用ガード
+  window.assertNotPaused = function(){
+    if (paused) throw new Error('PAUSED');
+  };
+})(db);
 
     /* =====================  チーム決定  ===================== */
 const teamLabel = document.getElementById('teamLabel');
@@ -338,6 +382,7 @@ function getTeamFromURL(){
     }
 
     cookBtn.addEventListener('click', ()=>{
+      try{ assertNotPaused(); }catch(_){ return; }
       cookMsg.textContent = '';
       const mats = slots.filter(Boolean).map(x => x.name);
       if (mats.length === 0){ cookMsg.textContent='素材を入れてください。'; cookMsg.className='msg warn'; return; }
@@ -445,6 +490,7 @@ function getTeamFromURL(){
     function warehouseRef(){ return ref(db, `warehouse/${TEAM}`); }
 
     async function takeFromWarehouse(name, qty){
+      try{ assertNotPaused(); }catch(_){ return; }
       // 集計チェック
       const agg = aggregateWarehouse(warehouseRaw);
       if ((agg[name]||0) < qty) return;
@@ -455,6 +501,7 @@ function getTeamFromURL(){
     }
 
     async function moveToWarehouse(name, qty){
+      try{ assertNotPaused(); }catch(_){ return; }
       // 手持ちから減らす（素材のみボタン表示しているが一応チェック）
       if (!removeFromInv(name, qty)) return;
       await push(warehouseRef(), { item:name, count:Math.abs(qty), ts:Date.now(), by:'tyuumon' });
@@ -462,6 +509,7 @@ function getTeamFromURL(){
 
     /* =====================  料理の提出（出す）  ===================== */
     async function serveDish(dish){
+      try{ assertNotPaused(); }catch(_){ return; }
       // 対象注文を検索（最も古いものから消す）
       const match = Object.entries(ordersMap).find(([id, o]) => o?.status?.dish === dish);
       if (!match){ alert('その料理の注文はありません'); return; }
@@ -521,5 +569,6 @@ attachDataBindings(); // ← これ一回だけでOK。以降 TEAM は固定。
   </script>
 </body>
 </html>
+
 
 
