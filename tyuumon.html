@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>注文対応 | 調理場</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@600;700&display=swap" rel="stylesheet">
+  <style>
+    :root{
+      --bg:#0b1020; --card:#0f172a; --muted:#9ca3af;
+      --border:rgba(255,255,255,.12); --accent:#38bdf8;
+      --ok:#22c55e; --warn:#f59e0b; --err:#ef4444;
+    }
+    *{ box-sizing:border-box }
+    html,body{ margin:0; height:100%; background:linear-gradient(135deg,#0b1020,#1f2937); color:#e5e7eb;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, "Poppins","Noto Sans JP", sans-serif; }
+    .wrap{ min-height:100%; padding:16px; display:grid; gap:16px; }
+    header{
+      display:flex; gap:12px; align-items:center; justify-content:space-between;
+      background:rgba(255,255,255,.05); border:1px solid var(--border);
+      padding:12px 14px; border-radius:14px; backdrop-filter: blur(8px);
+    }
+    .team{ display:flex; gap:10px; align-items:center; font-weight:700 }
+    .points{ font-weight:700; }
+    select,button,input{
+      font:600 14px/1.2 system-ui,-apple-system, Segoe UI, Roboto, "Noto Sans JP", sans-serif;
+      padding:10px 12px; border-radius:10px; border:1px solid var(--border); background:#111827; color:#e5e7eb;
+    }
+    button{ cursor:pointer } button:disabled{ opacity:.6; cursor:not-allowed }
+    .grid{ display:grid; grid-template-columns:1.2fr 1fr; gap:16px; }
+    @media (max-width:980px){ .grid{ grid-template-columns:1fr } }
+    .card{ background:var(--card); border:1px solid var(--border); border-radius:16px; padding:12px 12px 14px; }
+    .card h2{ margin:0 0 10px; font-size:18px }
+    .sub{ color:var(--muted); font-size:12px; margin:4px 0 10px }
+    .list{ display:grid; gap:8px; }
+    .row{ display:grid; grid-template-columns: 1fr auto; gap:10px; align-items:center;
+          padding:10px; border:1px solid var(--border); border-radius:12px; background:#0b1222; }
+    .row .name{ font-weight:700 }
+    .kv{ display:flex; gap:8px; align-items:center; flex-wrap:wrap }
+    .qty{ padding:4px 8px; border-radius:999px; border:1px solid var(--border); }
+    .muted{ color:var(--muted) }
+    .ok{ color:var(--ok) } .err{ color:var(--err) } .warn{ color:var(--warn) }
+
+    /* 調理スロット */
+    .cook{
+      display:grid; grid-template-columns: repeat(6, minmax(0,1fr)); gap:10px;
+      margin-top:8px;
+    }
+    .slot{
+      height:58px; border:1px dashed rgba(255,255,255,.25); border-radius:12px;
+      display:grid; place-items:center; background:#0a1220; position:relative;
+    }
+    .slot.filled{ border-style:solid; }
+    .chip{
+      display:inline-flex; align-items:center; gap:8px; padding:6px 10px;
+      border-radius:999px; background:rgba(255,255,255,.08); border:1px solid var(--border); font-weight:700;
+    }
+    .x{ cursor:pointer; opacity:.9; }
+    .toolbar{ display:flex; gap:8px; margin-top:10px; align-items:center; }
+    .msg{ margin-top:8px; font-size:13px; min-height:18px }
+
+    /* 注文リスト */
+    .orders-head,.orders-row{
+      display:grid; grid-template-columns: 120px 1fr 200px; gap:10px; align-items:center;
+      padding:8px 10px; border-radius:10px;
+    }
+    .orders-head{ background:rgba(255,255,255,.07); font-weight:800; }
+    .orders-row{ border:1px solid var(--border); background:#0b1222; margin-top:6px; }
+    .pill{ border:1px solid var(--border); border-radius:999px; padding:4px 8px; font-size:12px; }
+
+    /* D&D */
+    .drag{ user-select:none }
+    .drag[draggable="true"]{ cursor:grab }
+    .ghost{ opacity:.35 }
+
+    footer{ text-align:center; color:var(--muted); font-size:12px }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="team">
+        <span>現在のチーム：</span>
+        <select id="teamSelect">
+          <option value="team1">チーム1</option>
+          <option value="team2">チーム2</option>
+          <option value="team3">チーム3</option>
+          <option value="team4">チーム4</option>
+        </select>
+        <span id="teamHint" class="muted"></span>
+      </div>
+      <div class="points">ポイント：<span id="pointsLbl">0</span></div>
+    </header>
+
+    <div class="grid">
+      <!-- 左：倉庫と持ち物 -->
+      <div class="card">
+        <h2>倉庫の食材</h2>
+        <div id="warehouseList" class="list"></div>
+        <div class="sub">倉庫 ⇄ 手持ちに移動できます。</div>
+
+        <h2 style="margin-top:14px;">自分が持っているもの</h2>
+        <div id="invList" class="list"></div>
+        <div class="sub">※ 料理には「出す」ボタン、素材には「倉庫へ戻す」ボタンが付きます。削除ボタンはありません。</div>
+      </div>
+
+      <!-- 右：調理 / 注文 -->
+      <div class="card">
+        <h2>調理</h2>
+        <div class="sub">素材を下のスロットにドラッグ＆ドロップ → 「料理する」</div>
+        <div class="cook" id="slots"></div>
+        <div class="toolbar">
+          <button id="cookBtn">料理する</button>
+          <button id="clearSlotsBtn">スロットをクリア</button>
+        </div>
+        <div id="cookMsg" class="msg"></div>
+
+        <h2 style="margin-top:16px;">受注中（このチーム）</h2>
+        <div class="orders-head">
+          <div>注文ID</div><div>料理名 / 素材</div><div>作成時刻</div>
+        </div>
+        <div id="ordersList" class="list"></div>
+        <div id="ordersMsg" class="msg muted"></div>
+      </div>
+    </div>
+
+    <footer>ドラッグしてスロット外に離した場合は自動で手持ちに戻ります。</footer>
+  </div>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
+    import {
+      getDatabase, ref, child, get, onValue, push, remove, runTransaction
+    } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js";
+
+    /* =====================  設定・レシピ  ===================== */
+    // ★オーナー画面と同じにしてください
+    const DISH_MASTER = {
+      "キノコのクリームパスタ": { materials: ["キノコ","乳","小麦","塩"] },
+      "焼き魚定食":            { materials: ["魚","米","塩"] },
+      "ハーブスープ":            { materials: ["野菜","ハーブ","塩","水"] },
+      // 追加...
+    };
+
+    /* =====================  Firebase  ===================== */
+    const firebaseConfig = {
+      apiKey: "AIzaSyDPe5cSCavq5gHopugdOfQ-9_50cTrqmyk",
+      authDomain: "school-178c2.firebaseapp.com",
+      databaseURL: "https://school-178c2-default-rtdb.europe-west1.firebasedatabase.app",
+      projectId: "school-178c2",
+      storageBucket: "school-178c2.firebasestorage.app",
+      messagingSenderId: "409885673101",
+      appId: "1:409885673101:web:25bf0483547e2d470304c4"
+    };
+    const app = initializeApp(firebaseConfig);
+    const db  = getDatabase(app);
+
+    /* =====================  チーム決定  ===================== */
+    const teamSelect = document.getElementById('teamSelect');
+    const teamHint   = document.getElementById('teamHint');
+    function getTeamFromURL(){ const m = location.search.match(/[?&]team=(\d)/); return m ? 'team'+m[1] : null; }
+    function loadTeam(){
+      return getTeamFromURL() || localStorage.getItem('selected_team') || 'team1';
+    }
+    function saveTeam(t){
+      localStorage.setItem('selected_team', t);
+    }
+    let TEAM = loadTeam();
+    teamSelect.value = TEAM;
+    teamHint.textContent = (getTeamFromURL() ? '(URLで指定)' : '(前回の選択を使用)');
+
+    teamSelect.addEventListener('change', ()=>{
+      TEAM = teamSelect.value;
+      saveTeam(TEAM);
+      attachDataBindings(); // 再購読
+    });
+
+    /* =====================  ローカル在庫（手持ち）  ===================== */
+    const INV_KEY = 'inventory_v1'; // 既存仕様と互換
+    function loadInv(){
+      try{
+        const raw = localStorage.getItem(INV_KEY);
+        const obj = raw ? JSON.parse(raw) : {};
+        if (!('total' in obj) || !('byItem' in obj)){
+          const byItem = obj && typeof obj === 'object' ? obj : {};
+          const total = Object.values(byItem).reduce((a,b)=> a+(b||0), 0);
+          const neo = { total, byItem }; localStorage.setItem(INV_KEY, JSON.stringify(neo)); return neo;
+        }
+        return obj;
+      }catch{ return { total:0, byItem:{} } }
+    }
+    let inv = loadInv();
+    function saveInv(){ try{ localStorage.setItem(INV_KEY, JSON.stringify(inv)); }catch{} }
+    function addToInv(name, qty=1){
+      inv.total += qty; inv.byItem[name] = (inv.byItem[name]||0)+qty; if (inv.byItem[name]<=0){ delete inv.byItem[name] }
+      saveInv(); renderInv();
+    }
+    function removeFromInv(name, qty=1){
+      if (!inv.byItem[name] || inv.byItem[name] < qty) return false;
+      inv.total -= qty; inv.byItem[name] -= qty;
+      if (inv.byItem[name] <= 0) delete inv.byItem[name];
+      saveInv(); renderInv(); return true;
+    }
+
+    /* =====================  倉庫集計（チーム別）  ===================== */
+    const warehouseList = document.getElementById('warehouseList');
+    let warehouseRaw = {}; // pushログの生データ
+    function aggregateWarehouse(raw){
+      const by = {};
+      Object.values(raw||{}).forEach(v=>{
+        const name = v.item;
+        if (!name) return;
+        const delta = (typeof v.count === 'number') ? v.count : 1; // 旧仕様のpush互換
+        by[name] = (by[name]||0) + delta;
+      });
+      // マイナスは0に見せる
+      Object.keys(by).forEach(k=> { if (by[k] < 0) by[k] = 0; });
+      return by;
+    }
+
+    /* =====================  注文・ポイント  ===================== */
+    const ordersList = document.getElementById('ordersList');
+    const ordersMsg  = document.getElementById('ordersMsg');
+    const pointsLbl  = document.getElementById('pointsLbl');
+    let ordersMap = {}; // id -> order
+
+    /* =====================  調理スロット  ===================== */
+    const SLOTS = 6;
+    const slotsEl = document.getElementById('slots');
+    const cookBtn = document.getElementById('cookBtn');
+    const clearSlotsBtn = document.getElementById('clearSlotsBtn');
+    const cookMsg = document.getElementById('cookMsg');
+    const slots = new Array(SLOTS).fill(null); // 例: [{name:"魚"} or null]
+
+    function initSlots(){
+      slotsEl.innerHTML = '';
+      for (let i=0;i<SLOTS;i++){
+        const s = document.createElement('div');
+        s.className = 'slot';
+        s.dataset.idx = String(i);
+        s.addEventListener('dragover', (e)=>{ e.preventDefault(); });
+        s.addEventListener('drop', onDropToSlot);
+        slotsEl.appendChild(s);
+      }
+      renderSlots();
+    }
+    function renderSlots(){
+      for (let i=0;i<SLOTS;i++){
+        const s = slotsEl.children[i];
+        s.classList.toggle('filled', !!slots[i]);
+        s.innerHTML = '';
+        if (slots[i]){
+          const chip = document.createElement('span');
+          chip.className = 'chip drag';
+          chip.textContent = slots[i].name;
+          chip.setAttribute('draggable','true');
+          chip.addEventListener('dragstart', (e)=> onDragFromSlot(e, i));
+          // ×で戻す
+          const x = document.createElement('span'); x.className='x'; x.textContent='✕';
+          x.title='手持ちに戻す';
+          x.addEventListener('click', ()=>{ addToInv(slots[i].name,1); slots[i]=null; renderSlots(); });
+          chip.appendChild(x);
+          s.appendChild(chip);
+        }else{
+          s.textContent = '素材';
+        }
+      }
+    }
+    function clearSlots(){
+      // スロットの中身をすべて手持ちに返す
+      for (let i=0;i<SLOTS;i++){
+        if (slots[i]) addToInv(slots[i].name,1);
+        slots[i]=null;
+      }
+      renderSlots();
+      cookMsg.textContent = '';
+    }
+    clearSlotsBtn.addEventListener('click', clearSlots);
+
+    /* =====================  D&D（インベントリ→スロット / スロット→外） ===================== */
+    function onDragFromInv(e, name){
+      e.dataTransfer.setData('text/plain', JSON.stringify({ src:'inv', name }));
+      e.dataTransfer.effectAllowed = 'copy';
+      e.currentTarget.classList.add('ghost');
+    }
+    function onDragEndInv(e){ e.currentTarget.classList.remove('ghost'); }
+
+    function onDragFromSlot(e, idx){
+      const name = slots[idx]?.name; if (!name) return;
+      e.dataTransfer.setData('text/plain', JSON.stringify({ src:'slot', name, idx }));
+      e.dataTransfer.effectAllowed = 'move';
+      e.currentTarget.classList.add('ghost');
+    }
+
+    function onDropToSlot(e){
+      e.preventDefault();
+      try{
+        const data = JSON.parse(e.dataTransfer.getData('text/plain')||'{}');
+        const idx = Number(e.currentTarget.dataset.idx);
+        if (!Number.isInteger(idx)) return;
+
+        if (data.src === 'inv'){
+          // 在庫から1つ使う
+          if (removeFromInv(data.name,1)){
+            // 空きスロットへのみ
+            if (slots[idx]){
+              // 埋まっていたら戻して、今回のを置く
+              addToInv(slots[idx].name,1);
+            }
+            slots[idx] = { name: data.name };
+            renderSlots();
+          }
+        }else if (data.src === 'slot'){
+          const from = data.idx;
+          if (from === idx) return;
+          // 既存を戻す
+          if (slots[idx]) addToInv(slots[idx].name,1);
+          // 移動
+          slots[idx] = slots[from];
+          slots[from] = null;
+          renderSlots();
+        }
+      }catch(_){}
+    }
+
+    // 画面外/空白にドロップ → スロットからなら手持ちへ戻す
+    document.addEventListener('dragover', (e)=>{ /* allow drop on body */ e.preventDefault(); });
+    document.addEventListener('drop', (e)=>{
+      const dropInsideSlot = e.composedPath().some(el => el && el.classList && el.classList.contains('slot'));
+      if (dropInsideSlot) return;
+      try{
+        const data = JSON.parse(e.dataTransfer.getData('text/plain')||'{}');
+        if (data.src === 'slot' && Number.isInteger(data.idx) && slots[data.idx]){
+          addToInv(slots[data.idx].name,1); slots[data.idx]=null; renderSlots();
+        }
+      }catch(_){}
+    });
+
+    /* =====================  調理ロジック  ===================== */
+    function normalize(arr){ return (arr||[]).slice().sort(); }
+    function matchDish(materialsArr){
+      const use = normalize(materialsArr);
+      for (const [dish, def] of Object.entries(DISH_MASTER)){
+        const need = normalize(def.materials||[]);
+        if (need.length === use.length && need.every((v,i)=> v===use[i])){
+          return dish;
+        }
+      }
+      return null;
+    }
+
+    cookBtn.addEventListener('click', ()=>{
+      cookMsg.textContent = '';
+      const mats = slots.filter(Boolean).map(x => x.name);
+      if (mats.length === 0){ cookMsg.textContent='素材を入れてください。'; cookMsg.className='msg warn'; return; }
+
+      const dish = matchDish(mats);
+      if (!dish){
+        cookMsg.textContent = '違います（その組み合わせでは作れません）'; cookMsg.className='msg err';
+        // スロットの素材は手持ちに戻す
+        clearSlots();
+        return;
+      }
+      // 成功：素材は消費済み（スロットから取り出しているため）、スロットは空に
+      for (let i=0;i<SLOTS;i++) slots[i] = null;
+      renderSlots();
+      addToInv(dish, 1);
+      cookMsg.textContent = `「${dish}」を作りました！`; cookMsg.className='msg ok';
+    });
+
+    /* =====================  UIレンダリング（持ち物 / 倉庫 / 注文 / ポイント） ===================== */
+    const invList = document.getElementById('invList');
+
+    function renderInv(){
+      invList.innerHTML = '';
+      const entries = Object.entries(inv.byItem).sort((a,b)=> a[0].localeCompare(b[0],'ja'));
+      for (const [name, qty] of entries){
+        const row = document.createElement('div'); row.className='row';
+        const left = document.createElement('div');
+        left.className='kv';
+        const n = document.createElement('span'); n.className='name drag'; n.textContent = name;
+        n.setAttribute('draggable','true');
+        n.addEventListener('dragstart', (e)=> onDragFromInv(e, name));
+        n.addEventListener('dragend', onDragEndInv);
+        const q = document.createElement('span'); q.className='qty'; q.textContent = `× ${qty}`;
+        left.appendChild(n); left.appendChild(q);
+
+        const right = document.createElement('div'); right.className='kv';
+        // 料理かどうか
+        const isDish = !!DISH_MASTER[name];
+        if (isDish){
+          const serve = document.createElement('button'); serve.textContent='出す';
+          serve.addEventListener('click', ()=> serveDish(name));
+          right.appendChild(serve);
+        }else{
+          const back = document.createElement('button'); back.textContent='倉庫へ戻す';
+          back.addEventListener('click', ()=> moveToWarehouse(name, 1));
+          right.appendChild(back);
+        }
+
+        row.appendChild(left); row.appendChild(right);
+        invList.appendChild(row);
+      }
+      if (entries.length === 0){
+        const empty = document.createElement('div'); empty.className='sub'; empty.textContent='（何も持っていません）';
+        invList.appendChild(empty);
+      }
+    }
+
+    function renderWarehouse(){
+      warehouseList.innerHTML = '';
+      const agg = aggregateWarehouse(warehouseRaw);
+      const entries = Object.entries(agg).sort((a,b)=> a[0].localeCompare(b[0],'ja'));
+      for (const [name, qty] of entries){
+        const row = document.createElement('div'); row.className='row';
+        const left = document.createElement('div'); left.className='kv';
+        const n = document.createElement('span'); n.className='name'; n.textContent = name;
+        const q = document.createElement('span'); q.className='qty'; q.textContent = `× ${qty}`;
+        left.appendChild(n); left.appendChild(q);
+
+        const right = document.createElement('div'); right.className='kv';
+        const take = document.createElement('button'); take.textContent='取り出す';
+        take.disabled = qty <= 0;
+        take.addEventListener('click', ()=> takeFromWarehouse(name, 1));
+        right.appendChild(take);
+
+        row.appendChild(left); row.appendChild(right);
+        warehouseList.appendChild(row);
+      }
+      if (entries.length === 0){
+        const empty = document.createElement('div'); empty.className='sub'; empty.textContent='（倉庫は空です）';
+        warehouseList.appendChild(empty);
+      }
+    }
+
+    function renderOrders(){
+      ordersList.innerHTML = '';
+      const entries = Object.entries(ordersMap).sort((a,b)=> (b[1]?.createdAt||0) - (a[1]?.createdAt||0));
+      if (entries.length === 0){
+        ordersMsg.textContent = 'このチームの注文はありません。'; return;
+      }
+      ordersMsg.textContent = '';
+      for (const [id, o] of entries){
+        const row = document.createElement('div'); row.className='orders-row';
+        const idEl = document.createElement('div'); idEl.textContent = id.slice(-6);
+        const st  = document.createElement('div');
+        const nm  = document.createElement('div'); nm.innerHTML = `<b>${o?.status?.dish || '—'}</b>`;
+        const mats= document.createElement('div'); mats.className='muted'; mats.textContent = (o?.status?.materials||[]).join('、') || '—';
+        st.appendChild(nm); st.appendChild(mats);
+        const ts  = document.createElement('div'); ts.className='muted'; ts.textContent = fmt(o.createdAt||0);
+        row.appendChild(idEl); row.appendChild(st); row.appendChild(ts);
+        ordersList.appendChild(row);
+      }
+    }
+
+    /* =====================  倉庫⇄持ち物の移動  ===================== */
+    function warehouseRef(){ return ref(db, `warehouse/${TEAM}`); }
+
+    async function takeFromWarehouse(name, qty){
+      // 集計チェック
+      const agg = aggregateWarehouse(warehouseRaw);
+      if ((agg[name]||0) < qty) return;
+      // 手持ちに追加
+      addToInv(name, qty);
+      // 倉庫ログ：取り出しは count:-qty
+      await push(warehouseRef(), { item:name, count:-Math.abs(qty), ts:Date.now(), by:'tyuumon' });
+    }
+
+    async function moveToWarehouse(name, qty){
+      // 手持ちから減らす（素材のみボタン表示しているが一応チェック）
+      if (!removeFromInv(name, qty)) return;
+      await push(warehouseRef(), { item:name, count:Math.abs(qty), ts:Date.now(), by:'tyuumon' });
+    }
+
+    /* =====================  料理の提出（出す）  ===================== */
+    async function serveDish(dish){
+      // 対象注文を検索（最も古いものから消す）
+      const match = Object.entries(ordersMap).find(([id, o]) => o?.status?.dish === dish);
+      if (!match){ alert('その料理の注文はありません'); return; }
+
+      const [orderId] = match;
+
+      // 手持ちに料理があるか
+      if (!inv.byItem[dish] || inv.byItem[dish] <= 0){ alert('手持ちにその料理がありません'); return; }
+
+      try{
+        // 料理を1つ消費
+        removeFromInv(dish, 1);
+
+        // 注文を削除
+        await remove(ref(db, `game/orders/${TEAM}/${orderId}`));
+
+        // ポイント+1（トランザクション）
+        await runTransaction(ref(db, `game/points/${TEAM}`), (cur)=> (cur||0)+1);
+
+        alert('注文にこたえました！ ポイント+1');
+      }catch(e){
+        console.error(e);
+        alert('提出に失敗しました');
+        // 失敗時は念のため戻す
+        addToInv(dish, 1);
+      }
+    }
+
+    /* =====================  データ購読の付け替え  ===================== */
+    let unsubOrders = null, unsubWarehouse = null, unsubPoints = null;
+    function attachDataBindings(){
+      // 既存の購読をリセット（onValueは解除APIがないので二重登録を避けるためDOM側のTEAM切替で再描画）
+      // 注文
+      onValue(ref(db, `game/orders/${TEAM}`), (snap)=>{
+        ordersMap = snap.exists()? snap.val(): {};
+        renderOrders();
+      });
+      // 倉庫
+      onValue(warehouseRef(), (snap)=>{
+        warehouseRaw = snap.exists()? snap.val(): {};
+        renderWarehouse();
+      });
+      // ポイント
+      onValue(ref(db, `game/points/${TEAM}`), (snap)=>{
+        pointsLbl.textContent = String(snap.exists()? snap.val(): 0);
+      });
+    }
+
+    /* =====================  起動  ===================== */
+    initSlots();
+    renderInv();
+    attachDataBindings();
+
+    // util
+    function fmt(ts){ try{ const d=new Date(ts); return `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}` }catch{ return '—' } }
+  </script>
+</body>
+</html>
