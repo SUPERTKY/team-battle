@@ -592,7 +592,7 @@ addToInventory(item, 1);
         const atX = parseFloat(target.style.left) || 0;
         const atY = parseFloat(target.style.top)  || 0;
         dropLoot(target.__mon, atX, atY);
-        showToast("キャラをゲット！");
+
 
         // その場で自然消滅 → 補充
         target.classList.add("vanish");
@@ -643,6 +643,7 @@ addToInventory(item, 1);
 
 </body>
 </html>
+
 
 
 
