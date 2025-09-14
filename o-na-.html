@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>オーナー | 管理ページ</title>
+  <title>オーナー | 注文管理</title>
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -32,78 +32,50 @@
       background: linear-gradient(135deg, var(--bg1), var(--bg2) 55%, var(--bg3));
       background-attachment: fixed;
     }
-    .wrap{
-      min-height:100%;
-      display:grid; place-items:center;
-      padding:32px;
-    }
+    .wrap{ min-height:100%; display:grid; place-items:center; padding:32px; }
     .card{
       width:min(1100px, 94vw);
       background: var(--card-bg);
       border:1px solid var(--border);
       border-radius:24px;
       box-shadow: var(--shadow);
-      backdrop-filter: blur(16px);
-      -webkit-backdrop-filter: blur(16px);
+      backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
       padding: clamp(20px, 4vw, 36px);
       animation: pop .5s ease both;
     }
     @keyframes pop{ from{opacity:0; transform:translateY(8px) scale(.985)} to{opacity:1; transform:none} }
-
     .title{ font-weight:700; font-size:clamp(22px,2.6vw,30px); margin:0 0 8px }
     .sub{ opacity:.9; margin:0 0 16px; font-size:clamp(13px,1.6vw,15px) }
 
-    .row{ display:flex; gap:10px; align-items:center }
+    .row{ display:flex; gap:10px; align-items:center; flex-wrap:wrap }
     .col{ display:flex; flex-direction:column; gap:8px }
-    .input, .btn, select, textarea{
+    .input, .btn, select{
       font:600 14px/1.2 system-ui,-apple-system,Segoe UI,Roboto,"Noto Sans JP",sans-serif;
       border-radius:12px; padding:12px 14px;
       border:1px solid var(--border); background: rgba(255,255,255,.1);
       color:inherit;
     }
-    .input, select, textarea{ min-width:0; }
-    textarea{ resize:vertical }
     .btn{ cursor:pointer; user-select:none; white-space:nowrap; }
     .btn.primary{ background: rgba(34,197,94,.18); border-color: rgba(34,197,94,.35); }
     .btn.warn{ background: rgba(245,158,11,.16); border-color: rgba(245,158,11,.35); }
     .btn.neutral{ background: rgba(255,255,255,.12); }
-    .btn:hover{ filter:brightness(1.04) }
-    .btn:active{ transform: translateY(1px) }
+    .btn:hover{ filter:brightness(1.04) } .btn:active{ transform: translateY(1px) }
 
     .help{ font-size:12px; opacity:.85; margin-top:8px }
     .msg{ margin-top:10px; font-size:13px; }
     .msg.ok{ color: var(--ok) } .msg.err{ color: var(--err) } .msg.warn{ color: var(--warn) }
 
-    .grid{
-      display:grid; gap:14px;
-      grid-template-columns: 1.15fr 1fr;
-      margin-top:16px;
-    }
+    .grid{ display:grid; gap:14px; grid-template-columns: 1.1fr 1fr; margin-top:16px; }
     @media (max-width:980px){ .grid{ grid-template-columns: 1fr } }
 
-    .panel{
-      padding:14px; border:1px solid var(--border); border-radius:16px;
-      background: rgba(0,0,0,.12);
-    }
+    .panel{ padding:14px; border:1px solid var(--border); border-radius:16px; background: rgba(0,0,0,.12); }
     .panel h3{ margin:0 0 10px; font-size:16px }
-
-    .kv{ display:flex; gap:8px; align-items:center; margin-top:10px }
-    .kv .k{ width:9em; opacity:.85; font-size:13px }
-    .kv .v{ flex:1; font-weight:700 }
-
-    .links{ display:flex; gap:10px; flex-wrap:wrap; margin-top:8px }
-    .chip{
-      display:inline-flex; align-items:center; gap:6px;
-      padding:6px 10px; border-radius:999px; border:1px solid var(--border);
-      background: rgba(255,255,255,.12); font-weight:700; font-size:12px;
-    }
-    .chip .x{ cursor:pointer; opacity:.9 }
     .muted{ opacity:.8 }
 
     .list{ margin-top:10px; border:1px solid var(--border); border-radius:14px; overflow:hidden }
     .thead, .trow{
-      display:grid; grid-template-columns: 140px 200px 1fr 220px 190px; gap:8px;
-      align-items:center; padding:10px 12px;
+      display:grid; grid-template-columns: 140px 200px 1fr 220px 140px;
+      gap:8px; align-items:center; padding:10px 12px;
     }
     .thead{ background: rgba(255,255,255,.08); font-weight:800 }
     .trow{ border-top:1px solid var(--border) }
@@ -114,88 +86,55 @@
 <body>
   <main class="wrap">
 
-    <!-- ログインカード -->
+    <!-- ログイン -->
     <section id="loginCard" class="card" aria-labelledby="loginTitle">
       <h1 id="loginTitle" class="title">オーナーログイン</h1>
-      <p class="sub">パスワードを入力して管理ページへ進んでください。</p>
-
+      <p class="sub">パスワードを入力してください。</p>
       <div class="row" style="margin-top:6px;">
         <input id="pw" class="input" type="password" placeholder="オーナーパスワード">
         <button id="togglePw" class="btn neutral" aria-pressed="false" title="表示/非表示">👁</button>
         <button id="loginBtn" class="btn primary">ログイン</button>
       </div>
       <div id="loginMsg" class="msg" role="status" aria-live="polite"></div>
-
-      <p class="help">
-        ※Firebase Realtime Database の <code>game/ownerPassword</code> に設定された文字列と一致した場合に入室できます。
-      </p>
+      <p class="help">※ Realtime Database の <code>game/ownerPassword</code> と一致した場合のみ入室できます。</p>
     </section>
 
-    <!-- ダッシュボード -->
+    <!-- 注文ダッシュボード（簡潔版） -->
     <section id="dashCard" class="card hidden" aria-labelledby="dashTitle">
-      <h1 id="dashTitle" class="title">オーナーダッシュボード</h1>
-      <p class="sub">このページはオーナーのみが閲覧・操作できます。</p>
+      <h1 id="dashTitle" class="title">注文ダッシュボード</h1>
+      <p class="sub">料理を選んで注文を作成します。素材や種類はコードの定義から自動で保存されます。</p>
 
       <div class="grid">
 
-        <!-- 左：注文を作成 -->
+        <!-- 左：注文作成（料理選択のみ） -->
         <div class="panel">
           <h3>注文を作成</h3>
-
           <div class="col">
-            <label>注文の種類</label>
-            <input id="orderTypeInput" class="input" list="orderTypesList" placeholder="例：通常注文 / 特急注文 / イベント注文">
-            <datalist id="orderTypesList"></datalist>
+            <label for="dishSelect">料理を選択</label>
+            <select id="dishSelect" class="input"></select>
+            <div id="dishPreview" class="muted"></div>
           </div>
-
-          <div class="col" style="margin-top:10px;">
-            <label>料理名（ステータス）</label>
-            <input id="dishInput" class="input" placeholder="例：キノコのクリームパスタ">
-          </div>
-
-          <div class="col" style="margin-top:10px;">
-            <label>素材（複数可・ステータス）</label>
-            <div class="row">
-              <input id="materialInput" class="input" list="materialsList" placeholder="素材を入力して『追加』">
-              <button id="addMatBtn" class="btn neutral">追加</button>
-            </div>
-            <datalist id="materialsList"></datalist>
-            <div id="matChips" class="links"></div>
-
-            <div class="muted" style="margin-top:6px;">候補：</div>
-            <div id="matSuggests" class="links"></div>
-          </div>
-
           <div class="row" style="margin-top:12px;">
             <button id="createOrderBtn" class="btn primary">注文を作成</button>
             <div id="createMsg" class="msg" role="status" aria-live="polite"></div>
           </div>
+          <p class="help">※ 料理リストと素材・注文の種類はファイル内の <code>DISH_MASTER</code> を編集してください。</p>
         </div>
 
-        <!-- 右：セッション＆パスワード -->
+        <!-- 右：セッション -->
         <div class="panel">
           <h3>セッション</h3>
-          <div class="kv"><div class="k">状態</div><div id="sessState" class="v">—</div></div>
-          <div class="kv"><div class="k">有効期限</div><div id="sessExp" class="v">—</div></div>
-          <div class="links" style="margin-top:8px;">
+          <div class="row"><div class="muted">状態：</div><div id="sessState">—</div></div>
+          <div class="row"><div class="muted">有効期限：</div><div id="sessExp">—</div></div>
+          <div class="row" style="margin-top:8px;">
             <button id="logoutBtn" class="btn warn">ログアウト</button>
             <button id="backBtn" class="btn neutral">戻る</button>
-          </div>
-
-          <div class="panel" style="margin-top:14px;">
-            <h3>オーナーパスワード変更</h3>
-            <div class="row">
-              <input id="newPw" class="input" type="text" placeholder="新しいオーナーパスワード">
-              <button id="changeBtn" class="btn primary">変更</button>
-            </div>
-            <div id="changeMsg" class="msg" role="status" aria-live="polite"></div>
-            <p class="help">※ DBの <code>game/ownerPassword</code> を上書き保存します。</p>
           </div>
         </div>
 
       </div>
 
-      <!-- 注文一覧 -->
+      <!-- 注文一覧（閲覧＋削除のみ） -->
       <div class="panel" style="margin-top:16px;">
         <h3>注文一覧</h3>
         <div class="thead">
@@ -204,28 +143,26 @@
         <div id="ordersList" class="list"></div>
         <div id="listMsg" class="msg muted"></div>
       </div>
-
-      <div class="panel" style="margin-top:14px;">
-        <h3>クイックリンク</h3>
-        <div class="links">
-          <a class="btn link neutral" href="tyuumon.html">注文ページへ</a>
-          <a class="btn link neutral" href="turi.html">釣り</a>
-          <a class="btn link neutral" href="kari.html">狩り</a>
-          <a class="btn link neutral" href="toru.html">採取</a>
-        </div>
-      </div>
     </section>
 
   </main>
 
-  <!-- Firebase & スクリプト -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
-    import {
-      getDatabase, ref, child, get, set, push, onValue, update, remove
-    } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js";
+    import { getDatabase, ref, child, get, push, onValue, remove } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js";
 
-    // ★Firebase 設定（メニューと同じプロジェクト）
+    // ======== ★ここを編集：料理一覧＆素材・注文種類（コード側で管理） ========
+    // key: 表示名（ユニーク推奨）
+    // value: { type: "注文の種類", materials: ["素材1","素材2",...] }
+    const DISH_MASTER = {
+      "キノコのクリームパスタ": { type: "通常注文", materials: ["キノコ","乳","小麦","塩"] },
+      "焼き魚定食":           { type: "通常注文", materials: ["魚","米","塩"] },
+      "ハーブスープ":           { type: "特急注文", materials: ["野菜","ハーブ","塩","水"] },
+      // ここに追加していく ↓
+      // "○○○": { type: "イベント注文", materials: ["A","B"] },
+    };
+    // ===============================================================
+
     const firebaseConfig = {
       apiKey: "AIzaSyDPe5cSCavq5gHopugdOfQ-9_50cTrqmyk",
       authDomain: "school-178c2.firebaseapp.com",
@@ -239,11 +176,7 @@
     const app = initializeApp(firebaseConfig);
     const db  = getDatabase(app);
 
-    /* ====== 定数（候補） ====== */
-    const ORDER_TYPES = ["通常注文","特急注文","イベント注文","補充依頼","テスト注文"];
-    const MATERIAL_SUGGESTIONS = ["肉","魚","キノコ","野菜","小麦","米","卵","乳","塩","砂糖","油","水","スパイス","ハーブ","貝","海藻"];
-
-    /* ====== DOM ====== */
+    // ===== DOM =====
     const loginCard = document.getElementById('loginCard');
     const dashCard  = document.getElementById('dashCard');
     const pwInput   = document.getElementById('pw');
@@ -251,74 +184,59 @@
     const loginMsg  = document.getElementById('loginMsg');
     const togglePw  = document.getElementById('togglePw');
 
+    const dishSelect    = document.getElementById('dishSelect');
+    const dishPreview   = document.getElementById('dishPreview');
+    const createOrderBtn= document.getElementById('createOrderBtn');
+    const createMsg     = document.getElementById('createMsg');
+
     const sessState = document.getElementById('sessState');
     const sessExp   = document.getElementById('sessExp');
     const logoutBtn = document.getElementById('logoutBtn');
     const backBtn   = document.getElementById('backBtn');
 
-    const newPw     = document.getElementById('newPw');
-    const changeBtn = document.getElementById('changeBtn');
-    const changeMsg = document.getElementById('changeMsg');
+    const ordersList = document.getElementById('ordersList');
+    const listMsg    = document.getElementById('listMsg');
 
-    // 注文UI
-    const orderTypeInput = document.getElementById('orderTypeInput');
-    const orderTypesList = document.getElementById('orderTypesList');
-    const dishInput      = document.getElementById('dishInput');
-    const materialInput  = document.getElementById('materialInput');
-    const materialsList  = document.getElementById('materialsList');
-    const addMatBtn      = document.getElementById('addMatBtn');
-    const matChips       = document.getElementById('matChips');
-    const matSuggests    = document.getElementById('matSuggests');
-    const createOrderBtn = document.getElementById('createOrderBtn');
-    const createMsg      = document.getElementById('createMsg');
-
-    const ordersList     = document.getElementById('ordersList');
-    const listMsg        = document.getElementById('listMsg');
-
-    /* ====== セッション ====== */
+    // ===== セッション =====
     const SS_KEY = 'owner_session_v1';
     const SESSION_MS = 2 * 60 * 60 * 1000;
+    const now = ()=> Date.now();
+    const fmt = (ts)=>{ try{ const d=new Date(ts); return `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}` }catch{ return '—' } };
+    const loadSess = ()=>{ try{ const raw = sessionStorage.getItem(SS_KEY); return raw?JSON.parse(raw):null }catch{ return null } };
+    const saveSess = (o)=>{ try{ sessionStorage.setItem(SS_KEY, JSON.stringify(o)) }catch{} };
+    const clearSess= ()=>{ try{ sessionStorage.removeItem(SS_KEY) }catch{} };
+    const updateSessUI = (s)=>{ if(s&&s.ok){ sessState.textContent='ログイン中'; sessExp.textContent=fmt(s.exp) } else { sessState.textContent='未ログイン'; sessExp.textContent='—' } };
+    const showDash = ()=>{ loginCard.classList.add('hidden'); dashCard.classList.remove('hidden'); };
+    const showLogin= ()=>{ dashCard.classList.add('hidden'); loginCard.classList.remove('hidden'); };
 
-    function now(){ return Date.now(); }
-    function fmt(ts){
-      try{
-        const d = new Date(ts);
-        return `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
-      }catch{ return '—'; }
-    }
-    function loadSess(){ try{ const raw = sessionStorage.getItem(SS_KEY); return raw ? JSON.parse(raw) : null; }catch{ return null; } }
-    function saveSess(obj){ try{ sessionStorage.setItem(SS_KEY, JSON.stringify(obj)); }catch{} }
-    function clearSess(){ try{ sessionStorage.removeItem(SS_KEY); }catch{} }
-    function updateSessUI(sess){
-      if (sess && sess.ok){
-        sessState.textContent = 'ログイン中';
-        sessExp.textContent = fmt(sess.exp);
-      }else{
-        sessState.textContent = '未ログイン';
-        sessExp.textContent = '—';
-      }
-    }
-    function showDash(){ loginCard.classList.add('hidden'); dashCard.classList.remove('hidden'); }
-    function showLogin(){ dashCard.classList.add('hidden'); loginCard.classList.remove('hidden'); }
-
-    // 起動時セッション確認
+    // 起動：料理リスト→セッション確認
     (function boot(){
-      // 候補の描画
-      ORDER_TYPES.forEach(t => {
-        const o = document.createElement('option'); o.value = t; orderTypesList.appendChild(o);
+      // 料理プルダウン描画
+      const names = Object.keys(DISH_MASTER).sort((a,b)=> a.localeCompare(b,'ja'));
+      dishSelect.innerHTML = '';
+      names.forEach(n=>{
+        const opt = document.createElement('option');
+        opt.value = n; opt.textContent = n; dishSelect.appendChild(opt);
       });
-      MATERIAL_SUGGESTIONS.forEach(m => {
-        const o = document.createElement('option'); o.value = m; materialsList.appendChild(o);
-        const b = document.createElement('button');
-        b.className = 'btn neutral'; b.textContent = m;
-        b.addEventListener('click', ()=> addMaterial(m));
-        matSuggests.appendChild(b);
-      });
+      if (names.length === 0){
+        const opt = document.createElement('option');
+        opt.value = ''; opt.textContent = '（DISH_MASTERに料理を追加してください）';
+        dishSelect.appendChild(opt);
+      }
+      updateDishPreview();
 
       const s = loadSess();
       if (s && s.ok && s.exp > now()){ updateSessUI(s); showDash(); }
-      else{ clearSess(); showLogin(); }
+      else { clearSess(); showLogin(); }
     })();
+
+    function updateDishPreview(){
+      const key = dishSelect.value;
+      const def = DISH_MASTER[key];
+      if (!def){ dishPreview.textContent = '—'; return; }
+      dishPreview.textContent = `種類：${def.type || '—'}　素材：${(def.materials||[]).join('、') || '—'}`;
+    }
+    dishSelect.addEventListener('change', updateDishPreview);
 
     // パスワード表示切替
     togglePw.addEventListener('click', ()=>{
@@ -330,217 +248,90 @@
     // Enterでログイン
     pwInput.addEventListener('keydown', (e)=>{ if (e.key === 'Enter') loginBtn.click(); });
 
-    // ログイン処理
+    // ログイン
     loginBtn.addEventListener('click', async ()=>{
       loginMsg.textContent = '';
       const input = pwInput.value || '';
-      if (!input){ loginMsg.textContent = 'パスワードを入力してください。'; loginMsg.className='msg err'; return; }
+      if (!input){ loginMsg.textContent='パスワードを入力してください。'; loginMsg.className='msg err'; return; }
       try{
         const snap = await get(child(ref(db), 'game/ownerPassword'));
-        if (!snap.exists()){ loginMsg.textContent = 'ownerPassword が未設定です。'; loginMsg.className='msg warn'; return; }
+        if (!snap.exists()){ loginMsg.textContent='ownerPassword が未設定です。'; loginMsg.className='msg warn'; return; }
         const correct = String(snap.val() ?? '');
         if (input === correct){
           const s = { ok:true, exp: now() + SESSION_MS };
           saveSess(s); updateSessUI(s); showDash(); pwInput.value=''; loginMsg.textContent='';
         }else{
-          loginMsg.textContent = 'パスワードが違います。'; loginMsg.className='msg err';
+          loginMsg.textContent='パスワードが違います。'; loginMsg.className='msg err';
         }
       }catch(e){
-        console.error(e);
-        loginMsg.textContent = '通信に失敗しました。'; loginMsg.className='msg err';
+        console.error(e); loginMsg.textContent='通信に失敗しました。'; loginMsg.className='msg err';
       }
     });
 
-    // ログアウト
+    // ログアウト / 戻る
     logoutBtn.addEventListener('click', ()=>{ clearSess(); updateSessUI(null); showLogin(); });
+    backBtn.addEventListener('click', ()=>{ if (document.referrer) history.back(); else location.href='menu.html'; });
 
-    // 戻る
-    backBtn.addEventListener('click', ()=>{
-      if (document.referrer) history.back();
-      else location.href = 'menu.html'; // 必要に応じて修正
-    });
-
-    // パスワード変更
-    changeBtn.addEventListener('click', async ()=>{
-      changeMsg.textContent = '';
-      const s = loadSess();
-      if (!(s && s.ok && s.exp > now())){ changeMsg.textContent='ログイン有効期限切れです。'; changeMsg.className='msg warn'; return; }
-      const v = (newPw.value || '').trim();
-      if (!v){ changeMsg.textContent='新しいパスワードを入力してください。'; changeMsg.className='msg err'; return; }
-      if (v.length < 4){ changeMsg.textContent='4文字以上にしてください。'; changeMsg.className='msg err'; return; }
-      try{
-        await set(ref(db, 'game/ownerPassword'), v);
-        changeMsg.textContent='パスワードを更新しました。'; changeMsg.className='msg ok'; newPw.value='';
-      }catch(e){
-        console.error(e);
-        changeMsg.textContent='更新に失敗しました（権限/ルールを確認）。'; changeMsg.className='msg err';
-      }
-    });
-
-    /* ====== 注文作成 UI ロジック ====== */
-    let selectedMaterials = [];
-
-    function dedupe(arr){ return [...new Set(arr.map(v => (v||'').trim()).filter(v => v))]; }
-
-    function renderMatChips(){
-      matChips.innerHTML = '';
-      selectedMaterials.forEach((name, idx)=>{
-        const chip = document.createElement('span');
-        chip.className = 'chip';
-        const label = document.createElement('span'); label.textContent = name;
-        const x = document.createElement('span'); x.textContent = '✕'; x.className='x';
-        x.title = '削除'; x.addEventListener('click', ()=>{ selectedMaterials.splice(idx,1); selectedMaterials = dedupe(selectedMaterials); renderMatChips(); });
-        chip.appendChild(label); chip.appendChild(x);
-        matChips.appendChild(chip);
-      });
-      if (selectedMaterials.length === 0){
-        const tip = document.createElement('span');
-        tip.className='muted'; tip.textContent='（追加した素材はここに並びます）';
-        matChips.appendChild(tip);
-      }
-    }
-    renderMatChips();
-
-    function addMaterial(name){
-      const v = (name ?? materialInput.value ?? '').trim();
-      if (!v) return;
-      selectedMaterials.push(v);
-      selectedMaterials = dedupe(selectedMaterials);
-      materialInput.value = '';
-      renderMatChips();
-    }
-
-    addMatBtn.addEventListener('click', ()=> addMaterial());
-    materialInput.addEventListener('keydown', (e)=>{ if (e.key === 'Enter'){ e.preventDefault(); addMaterial(); } });
-
-    // 注文作成
+    // 注文作成（料理選ぶだけ）
     createOrderBtn.addEventListener('click', async ()=>{
       createMsg.textContent = '';
       const s = loadSess();
       if (!(s && s.ok && s.exp > now())){ createMsg.textContent='ログイン有効期限が切れています。'; createMsg.className='msg warn'; return; }
 
-      const type = (orderTypeInput.value || '').trim();
-      const dish = (dishInput.value || '').trim();
-      const materials = dedupe(selectedMaterials);
+      const dish = dishSelect.value;
+      const def  = DISH_MASTER[dish];
+      if (!def){ createMsg.textContent='DISH_MASTERに存在しない料理です。'; createMsg.className='msg err'; return; }
 
-      if (!type){ createMsg.textContent='「注文の種類」を入力してください。'; createMsg.className='msg err'; return; }
-      if (!dish){ createMsg.textContent='「料理名」を入力してください。'; createMsg.className='msg err'; return; }
-
-      const data = {
-        type,
-        status: { dish, materials },
+      const payload = {
+        type: def.type || '注文',
+        status: { dish, materials: Array.isArray(def.materials)? def.materials : [] },
         createdAt: now(),
         updatedAt: now()
       };
 
       try{
-        await push(ref(db, 'game/orders'), data);
-        createMsg.textContent = '注文を作成しました。'; createMsg.className='msg ok';
-        // クリア
-        // 候補に無いタイプは次回入力補助のため datalist に追加
-        if (!ORDER_TYPES.includes(type)){
-          const o = document.createElement('option'); o.value = type; orderTypesList.appendChild(o);
-        }
-        orderTypeInput.value=''; dishInput.value=''; selectedMaterials=[]; renderMatChips();
+        await push(ref(db, 'game/orders'), payload);
+        createMsg.textContent='注文を作成しました。'; createMsg.className='msg ok';
       }catch(e){
-        console.error(e);
-        createMsg.textContent = '作成に失敗しました（ルール/権限を確認）。'; createMsg.className='msg err';
+        console.error(e); createMsg.textContent='作成に失敗しました（権限/ルールを確認）。'; createMsg.className='msg err';
       }
     });
 
-    /* ====== 注文一覧（購読・編集・削除） ====== */
-    function renderOrdersView(map){
+    // 注文一覧（閲覧＋削除のみ）
+    function renderOrders(map){
       ordersList.innerHTML = '';
       const entries = map ? Object.entries(map) : [];
-      if (entries.length === 0){
-        listMsg.textContent = '注文はまだありません。';
-        return;
-      }
+      if (entries.length === 0){ listMsg.textContent='注文はまだありません。'; return; }
       listMsg.textContent = '';
 
-      // 新しい順に並べ替え
       entries.sort((a,b)=> (b[1]?.createdAt||0) - (a[1]?.createdAt||0));
-
       for (const [id, o] of entries){
-        const row = document.createElement('div');
-        row.className = 'trow';
-
-        // 表示用DOM
+        const row = document.createElement('div'); row.className='trow';
         const idEl   = document.createElement('div'); idEl.textContent = id.slice(-6);
         const typeEl = document.createElement('div'); typeEl.textContent = o.type || '—';
 
         const statusEl = document.createElement('div');
         const dishSpan = document.createElement('div'); dishSpan.innerHTML = `<b>${o?.status?.dish || '—'}</b>`;
         const matsSpan = document.createElement('div'); matsSpan.className='muted';
-        matsSpan.textContent = (o?.status?.materials||[]).join(', ') || '—';
+        matsSpan.textContent = (o?.status?.materials||[]).join('、') || '—';
         statusEl.appendChild(dishSpan); statusEl.appendChild(matsSpan);
 
-        const timeEl = document.createElement('div'); timeEl.className='muted';
-        timeEl.textContent = fmt(o.createdAt);
+        const timeEl = document.createElement('div'); timeEl.className='muted'; timeEl.textContent = fmt(o.createdAt);
 
         const actEl = document.createElement('div'); actEl.className='actions';
-        const editBtn = document.createElement('button'); editBtn.className='btn neutral'; editBtn.textContent='編集';
-        const delBtn  = document.createElement('button'); delBtn.className='btn warn'; delBtn.textContent='削除';
-        actEl.appendChild(editBtn); actEl.appendChild(delBtn);
+        const delBtn = document.createElement('button'); delBtn.className='btn warn'; delBtn.textContent='削除';
+        actEl.appendChild(delBtn);
 
-        // グリッドに追加
         row.appendChild(idEl); row.appendChild(typeEl); row.appendChild(statusEl); row.appendChild(timeEl); row.appendChild(actEl);
         ordersList.appendChild(row);
 
-        // 編集ハンドラ（インライン）
-        editBtn.addEventListener('click', ()=>{
-          // 既存表示を編集UIに差し替え
-          const typeInp = document.createElement('input'); typeInp.className='input'; typeInp.value = o.type || '';
-          const dishInp = document.createElement('input'); dishInp.className='input'; dishInp.value = o?.status?.dish || '';
-          const matsInp = document.createElement('input'); matsInp.className='input'; matsInp.placeholder='素材はカンマ区切り'; matsInp.value = (o?.status?.materials||[]).join(', ');
-
-          // 置換
-          typeEl.replaceChildren(typeInp);
-          statusEl.replaceChildren(dishInp, matsInp);
-
-          // 操作ボタンを差し替え
-          actEl.innerHTML='';
-          const saveBtn = document.createElement('button'); saveBtn.className='btn primary'; saveBtn.textContent='保存';
-          const cancelBtn = document.createElement('button'); cancelBtn.className='btn neutral'; cancelBtn.textContent='キャンセル';
-          actEl.appendChild(saveBtn); actEl.appendChild(cancelBtn);
-
-          cancelBtn.addEventListener('click', ()=>{ renderOrdersView(map); }); // 全体再描画で元に戻す
-
-          saveBtn.addEventListener('click', async ()=>{
-            const s = loadSess();
-            if (!(s && s.ok && s.exp > now())){ alert('ログイン有効期限切れ'); return; }
-            const nType = (typeInp.value||'').trim();
-            const nDish = (dishInp.value||'').trim();
-            const nMats = dedupe((matsInp.value||'').split(',').map(v=>v.trim()).filter(Boolean));
-            if (!nType || !nDish){ alert('種類と料理名は必須です。'); return; }
-            try{
-              await update(ref(db, 'game/orders/'+id), {
-                type: nType,
-                status: { dish: nDish, materials: nMats },
-                updatedAt: now()
-              });
-            }catch(e){
-              console.error(e); alert('保存に失敗しました。');
-            }
-          });
-        });
-
-        // 削除
         delBtn.addEventListener('click', async ()=>{
           if (!confirm('この注文を削除しますか？')) return;
-          try{
-            await remove(ref(db, 'game/orders/'+id));
-          }catch(e){
-            console.error(e); alert('削除に失敗しました。');
-          }
+          try{ await remove(ref(db, 'game/orders/'+id)); }catch(e){ console.error(e); alert('削除に失敗しました。'); }
         });
       }
     }
-
-    // 購読
-    onValue(ref(db, 'game/orders'), (snap)=>{
-      renderOrdersView(snap.exists() ? snap.val() : null);
-    });
+    onValue(ref(db, 'game/orders'), (snap)=> renderOrders(snap.exists()? snap.val(): null));
   </script>
 </body>
 </html>
