@@ -250,20 +250,9 @@ function getTeamFromURL(){
     }
 
     /* =====================  倉庫集計（チーム別）  ===================== */
-    const warehouseList = document.getElementById('warehouseList');
-    let warehouseRaw = {}; // pushログの生データ
-    function aggregateWarehouse(raw){
-      const by = {};
-      Object.values(raw||{}).forEach(v=>{
-        const name = v.item;
-        if (!name) return;
-        const delta = (typeof v.count === 'number') ? v.count : 1; // 旧仕様のpush互換
-        by[name] = (by[name]||0) + delta;
-      });
-      // マイナスは0に見せる
-      Object.keys(by).forEach(k=> { if (by[k] < 0) by[k] = 0; });
-      return by;
-    }
+const warehouseList = document.getElementById('warehouseList');
+let warehouseAgg = {}; // そのまま { itemName: count, ... } を保持
+
 
     /* =====================  注文・ポイント  ===================== */
     const ordersList = document.getElementById('ordersList');
@@ -466,31 +455,31 @@ if (!dish){
       }
     }
 
-    function renderWarehouse(){
-      warehouseList.innerHTML = '';
-      const agg = aggregateWarehouse(warehouseRaw);
-      const entries = Object.entries(agg).sort((a,b)=> a[0].localeCompare(b[0],'ja'));
-      for (const [name, qty] of entries){
-        const row = document.createElement('div'); row.className='row';
-        const left = document.createElement('div'); left.className='kv';
-        const n = document.createElement('span'); n.className='name'; n.textContent = name;
-        const q = document.createElement('span'); q.className='qty'; q.textContent = `× ${qty}`;
-        left.appendChild(n); left.appendChild(q);
+function renderWarehouse(){
+  warehouseList.innerHTML = '';
+  const entries = Object.entries(warehouseAgg||{}).sort((a,b)=> a[0].localeCompare(b[0],'ja'));
+  for (const [name, qty] of entries){
+    const row = document.createElement('div'); row.className='row';
+    const left = document.createElement('div'); left.className='kv';
+    const n = document.createElement('span'); n.className='name'; n.textContent = name;
+    const q = document.createElement('span'); q.className='qty'; q.textContent = `× ${qty}`;
+    left.appendChild(n); left.appendChild(q);
 
-        const right = document.createElement('div'); right.className='kv';
-        const take = document.createElement('button'); take.textContent='取り出す';
-        take.disabled = qty <= 0;
-        take.addEventListener('click', ()=> takeFromWarehouse(name, 1));
-        right.appendChild(take);
+    const right = document.createElement('div'); right.className='kv';
+    const take = document.createElement('button'); take.textContent='取り出す';
+    take.disabled = qty <= 0;
+    take.addEventListener('click', ()=> takeFromWarehouse(name, 1));
+    right.appendChild(take);
 
-        row.appendChild(left); row.appendChild(right);
-        warehouseList.appendChild(row);
-      }
-      if (entries.length === 0){
-        const empty = document.createElement('div'); empty.className='sub'; empty.textContent='（倉庫は空です）';
-        warehouseList.appendChild(empty);
-      }
-    }
+    row.appendChild(left); row.appendChild(right);
+    warehouseList.appendChild(row);
+  }
+  if (entries.length === 0){
+    const empty = document.createElement('div'); empty.className='sub'; empty.textContent='（倉庫は空です）';
+    warehouseList.appendChild(empty);
+  }
+}
+
 
     function renderOrders(){
       ordersList.innerHTML = '';
@@ -513,25 +502,37 @@ if (!dish){
     }
 
     /* =====================  倉庫⇄持ち物の移動  ===================== */
-    function warehouseRef(){ return ref(db, `warehouse/${TEAM}`); }
+function warehouseRef(){ return ref(db, `warehouse/${TEAM}/byItem`); }
 
-    async function takeFromWarehouse(name, qty){
-      try{ assertNotPaused(); }catch(_){ return; }
-      // 集計チェック
-      const agg = aggregateWarehouse(warehouseRaw);
-      if ((agg[name]||0) < qty) return;
-      // 手持ちに追加
-      addToInv(name, qty);
-      // 倉庫ログ：取り出しは count:-qty
-      await push(warehouseRef(), { item:name, count:-Math.abs(qty), ts:Date.now(), by:'tyuumon' });
-    }
 
-    async function moveToWarehouse(name, qty){
-      try{ assertNotPaused(); }catch(_){ return; }
-      // 手持ちから減らす（素材のみボタン表示しているが一応チェック）
-      if (!removeFromInv(name, qty)) return;
-      await push(warehouseRef(), { item:name, count:Math.abs(qty), ts:Date.now(), by:'tyuumon' });
-    }
+async function takeFromWarehouse(name, qty){
+  try{ assertNotPaused(); }catch(_){ return; }
+  const res = await runTransaction(ref(db, `warehouse/${TEAM}/byItem/${name}`), (cur)=>{
+    cur = cur || 0;
+    if (cur < qty) return;      // 在庫不足 → 未コミット
+    return cur - qty;           // 原子的に減算
+  });
+  if (res.committed && res.snapshot.exists()){
+    addToInv(name, qty);
+  }else{
+    showToast('在庫が足りません', 'warn');
+  }
+}
+
+async function moveToWarehouse(name, qty){
+  try{ assertNotPaused(); }catch(_){ return; }
+  if (!removeFromInv(name, qty)) return; // 手持ち側先行
+  const res = await runTransaction(ref(db, `warehouse/${TEAM}/byItem/${name}`), (cur)=>{
+    cur = cur || 0;
+    return cur + qty;           // 原子的に加算
+  });
+  if (!(res.committed && res.snapshot.exists())){
+    // 失敗したらロールバック
+    addToInv(name, qty);
+    showToast('倉庫に戻せませんでした', 'err');
+  }
+}
+
 
     /* =====================  料理の提出（出す）  ===================== */
     async function serveDish(dish){
@@ -574,10 +575,12 @@ if (!dish){
         renderOrders();
       });
       // 倉庫
-      onValue(warehouseRef(), (snap)=>{
-        warehouseRaw = snap.exists()? snap.val(): {};
-        renderWarehouse();
-      });
+// 倉庫
+onValue(warehouseRef(), (snap)=>{
+  warehouseAgg = snap.exists()? snap.val(): {};
+  renderWarehouse();
+});
+
       // ポイント
       onValue(ref(db, `game/points/${TEAM}`), (snap)=>{
         pointsLbl.textContent = String(snap.exists()? snap.val(): 0);
@@ -595,6 +598,7 @@ attachDataBindings(); // ← これ一回だけでOK。以降 TEAM は固定。
   </script>
 </body>
 </html>
+
 
 
 
