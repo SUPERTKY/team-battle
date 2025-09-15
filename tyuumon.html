@@ -76,6 +76,20 @@
     .ghost{ opacity:.35 }
 
     footer{ text-align:center; color:var(--muted); font-size:12px }
+    /* === 一瞬だけ出るトースト === */
+.toast{
+  position:fixed; left:50%; top:16px; transform:translateX(-50%) translateY(-8px);
+  background:#111827; border:1px solid var(--border); color:#e5e7eb;
+  padding:10px 14px; border-radius:999px; box-shadow:0 8px 30px rgba(0,0,0,.35);
+  opacity:0; pointer-events:none; z-index:100000;
+  transition:opacity .22s ease, transform .22s ease;
+  font:600 14px/1.2 system-ui,-apple-system, Segoe UI, Roboto, "Noto Sans JP", sans-serif;
+}
+.toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+.toast.warn{ border-color: var(--warn); color: var(--warn); }
+.toast.ok{ border-color: var(--ok); color: var(--ok); }
+.toast.err{ border-color: var(--err); color: var(--err); }
+
   </style>
 </head>
 <body>
@@ -122,6 +136,7 @@
 
     <footer>ドラッグしてスロット外に離した場合は自動で手持ちに戻ります。</footer>
   </div>
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
@@ -369,6 +384,17 @@ function getTeamFromURL(){
     });
 
     /* =====================  調理ロジック  ===================== */
+    // 一瞬だけ出すトースト
+let __toastTimer = null;
+function showToast(message, type='warn', duration=1400){
+  const el = document.getElementById('toast');
+  if (!el) return;
+  el.textContent = message;
+  el.className = `toast ${type} show`;
+  if (__toastTimer) clearTimeout(__toastTimer);
+  __toastTimer = setTimeout(()=>{ el.classList.remove('show'); }, duration);
+}
+
     function normalize(arr){ return (arr||[]).slice().sort(); }
     function matchDish(materialsArr){
       const use = normalize(materialsArr);
@@ -388,12 +414,12 @@ function getTeamFromURL(){
       if (mats.length === 0){ cookMsg.textContent='素材を入れてください。'; cookMsg.className='msg warn'; return; }
 
       const dish = matchDish(mats);
-      if (!dish){
-        cookMsg.textContent = '違います（その組み合わせでは作れません）'; cookMsg.className='msg err';
-        // スロットの素材は手持ちに戻す
-        clearSlots();
-        return;
-      }
+if (!dish){
+  showToast('その組み合わせでは作れません', 'warn');
+  clearSlots();
+  return;
+}
+
       // 成功：素材は消費済み（スロットから取り出しているため）、スロットは空に
       for (let i=0;i<SLOTS;i++) slots[i] = null;
       renderSlots();
@@ -569,6 +595,7 @@ attachDataBindings(); // ← これ一回だけでOK。以降 TEAM は固定。
   </script>
 </body>
 </html>
+
 
 
 
