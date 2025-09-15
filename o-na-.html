@@ -74,10 +74,10 @@
 
     .list{ margin-top:10px; border:1px solid var(--border); border-radius:14px; overflow:hidden }
     /* 種類列を削除したのでカラム再定義（チーム / ID / ステータス / 作成 / 操作） */
-    .thead, .trow{
-      display:grid; grid-template-columns: 90px 120px 1fr 200px 140px;
-      gap:8px; align-items:center; padding:10px 12px;
-    }
+.thead, .trow{
+  display:grid; grid-template-columns: 90px 1fr 200px 140px;
+  gap:8px; align-items:center; padding:10px 12px;
+}
     .thead{ background: rgba(255,255,255,.08); font-weight:800 }
     .trow{ border-top:1px solid var(--border) }
     .actions{ display:flex; gap:8px; flex-wrap:wrap; }
@@ -156,7 +156,7 @@
       <div class="panel" style="margin-top:16px;">
         <h3>注文一覧（チーム別）</h3>
         <div class="thead">
-          <div>チーム</div><div>ID</div><div>ステータス（料理名 / 素材）</div><div>作成</div><div>操作</div>
+          <div>チーム</div><div>ステータス（料理名 / 素材）</div><div>作成</div><div>操作</div>
         </div>
         <div id="ordersList" class="list"></div>
         <div id="listMsg" class="msg muted"></div>
@@ -388,49 +388,60 @@ onValue(ref(db, 'game/points'), (snap)=>{
     });
 
     // 注文一覧（チーム別）
-    function renderOrders(root){
-      ordersList.innerHTML = '';
-      const teams = ['team1','team2','team3','team4'];
-      let total = 0;
+function renderOrders(root){
+  ordersList.innerHTML = '';
+  const teams = ['team1','team2','team3','team4'];
+  let total = 0;
 
-      teams.forEach(team=>{
-        const map = root?.[team] || null;
-        const entries = map ? Object.entries(map) : [];
-        // 新しい順
-        entries.sort((a,b)=> (b[1]?.createdAt||0) - (a[1]?.createdAt||0));
-        entries.forEach(([id, o])=>{
-          total++;
-          const row = document.createElement('div'); row.className='trow';
+  teams.forEach(team=>{
+    const map = root?.[team] || null;
+    const entries = map ? Object.entries(map) : [];
+    entries.sort((a,b)=> (b[1]?.createdAt||0) - (a[1]?.createdAt||0));
 
-          const teamEl = document.createElement('div'); teamEl.textContent = team.toUpperCase().replace('TEAM','チーム');
-          const idEl   = document.createElement('div'); idEl.textContent = id.slice(-6);
+    entries.forEach(([id, o])=>{
+      total++;
+      const row = document.createElement('div'); row.className='trow';
 
-          const statusEl = document.createElement('div');
-          const dishSpan = document.createElement('div'); dishSpan.innerHTML = `<b>${o?.status?.dish || '—'}</b>`;
-          const matsSpan = document.createElement('div'); matsSpan.className='muted';
-          matsSpan.textContent = (o?.status?.materials||[]).join('、') || '—';
-          statusEl.appendChild(dishSpan); statusEl.appendChild(matsSpan);
+      // 列1：チーム
+      const teamEl = document.createElement('div');
+      teamEl.textContent = team.toUpperCase().replace('TEAM','チーム');
 
-          const timeEl = document.createElement('div'); timeEl.className='muted'; timeEl.textContent = fmt(o.createdAt);
+      // （ID列は作らない）
 
-          const actEl = document.createElement('div'); actEl.className='actions';
-          const delBtn = document.createElement('button'); delBtn.className='btn warn'; delBtn.textContent='削除';
-          actEl.appendChild(delBtn);
+      // 列2：ステータス（料理名 / 素材）
+      const statusEl = document.createElement('div');
+      const dishSpan = document.createElement('div'); dishSpan.innerHTML = `<b>${o?.status?.dish || '—'}</b>`;
+      const matsSpan = document.createElement('div'); matsSpan.className='muted';
+      matsSpan.textContent = (o?.status?.materials||[]).join('、') || '—';
+      statusEl.appendChild(dishSpan); statusEl.appendChild(matsSpan);
 
-          row.appendChild(teamEl); row.appendChild(idEl); row.appendChild(statusEl); row.appendChild(timeEl); row.appendChild(actEl);
-          ordersList.appendChild(row);
+      // 列3：作成
+      const timeEl = document.createElement('div'); timeEl.className='muted'; timeEl.textContent = fmt(o.createdAt);
 
-          // 個別削除
-          delBtn.addEventListener('click', async ()=>{
-            if (!confirm(`この注文（${team} / ${id.slice(-6)}）を削除しますか？`)) return;
-            try{ await remove(ref(db, `game/orders/${team}/${id}`)); }
-            catch(e){ console.error(e); alert('削除に失敗しました。'); }
-          });
-        });
+      // 列4：操作
+      const actEl = document.createElement('div'); actEl.className='actions';
+      const delBtn = document.createElement('button'); delBtn.className='btn warn'; delBtn.textContent='削除';
+      actEl.appendChild(delBtn);
+
+      // 4列ぶんだけ append（IDは挟まない）
+      row.appendChild(teamEl);
+      row.appendChild(statusEl);
+      row.appendChild(timeEl);
+      row.appendChild(actEl);
+      ordersList.appendChild(row);
+
+      // 個別削除（確認メッセージからID表記を外す or 時刻にする）
+      delBtn.addEventListener('click', async ()=>{
+        if (!confirm(`この注文（${team} / ${fmt(o.createdAt)}）を削除しますか？`)) return;
+        try{ await remove(ref(db, `game/orders/${team}/${id}`)); }
+        catch(e){ console.error(e); alert('削除に失敗しました。'); }
       });
+    });
+  });
 
-      listMsg.textContent = total === 0 ? '注文はまだありません。' : `合計 ${total} 件`;
-    }
+  listMsg.textContent = total === 0 ? '注文はまだありません。' : `合計 ${total} 件`;
+}
+
     const pointsList = document.getElementById('pointsList');
 
 function renderPoints(map){
@@ -448,6 +459,7 @@ function renderPoints(map){
   </script>
 </body>
 </html>
+
 
 
 
