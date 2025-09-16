@@ -343,11 +343,18 @@ function renderInventory(){
     // 倉庫（Firebase があれば保存）
     actionCell.querySelector('.btnStore').addEventListener('click', async ()=>{
       try{
-        const api = window.firebaseDB;
-        if(!api) throw new Error('no-firebase');
-        const { db, ref, push } = api;
-        const dbRef = ref(db, `warehouse/${TEAM}`);
- await push(dbRef, { item: name, count: 1, ts: Date.now(), by: 'battle' });
+const api = window.firebaseDB;
+   if(!api) throw new Error('no-firebase');
+   const { db, ref, runTransaction, push } = api;
+   // 一時停止中なら何もしない（任意）
+   try{ assertNotPaused(); }catch(_){ return; }
+   // ① 集計ノードへ原子的に +1
+  const node = ref(db, `warehouse/${TEAM}/byItem/${name}`);
+   await runTransaction(node, cur => (cur || 0) + 1);
+   // ②（任意）ログを残す
+   await push(ref(db, `warehouse/${TEAM}/logs`), {
+     item: name, delta: +1, ts: Date.now(), src: 'battle'
+  });
 
         // 在庫を1つ減らす
         if (inv.byItem[name]){
@@ -629,7 +636,7 @@ addToInventory(item, 1);
   <!-- Firebase（倉庫保存用） -->
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
- import { getDatabase, ref, push, onValue } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js";
+ import { getDatabase, ref, push, onValue, runTransaction } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js";
 
   // ★あなたが使っていた設定
   const firebaseConfig = {
@@ -690,11 +697,12 @@ addToInventory(item, 1);
 })(db);
 
   // 他のスクリプト（インベントリの「倉庫」ボタン）から使えるようにexport
-  window.firebaseDB = { db, ref, push };
+  window.firebaseDB = { db, ref, push, runTransaction };
 </script>
 
 </body>
 </html>
+
 
 
 
