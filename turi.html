@@ -536,9 +536,10 @@ function renderInventory(){
 // 倉庫にしまう（TEAM と item に統一）
 rowCount.querySelector('.btnStore').addEventListener('click', async ()=>{
   try{
-    const { db, ref, push } = window.firebaseDB;
-    const dbRef = ref(db, `warehouse/${TEAM}`);
-    await push(dbRef, { item: name, count: 1, ts: Date.now(), by: 'turi' });
+   const { db, ref, runTransaction, push } = window.firebaseDB;
+   // ① 集計ノードへ原子的に +1
+   const node = ref(db, `warehouse/${TEAM}/byItem/${name}`);
+   await runTransaction(node, cur => (cur || 0) + 1);
 
     // インベントリから削除
     if (inventory.bySpecies[name]) {
@@ -591,7 +592,7 @@ function showToast(html){
 </script>
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
- import { getDatabase, ref, push, onValue } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js";
+ import { getDatabase, ref, push, onValue, runTransaction } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js";
 
 
 const firebaseConfig = {
@@ -651,12 +652,13 @@ const firebaseConfig = {
 })(db);
 
   // 他のスクリプトから使えるように window に載せる
-  window.firebaseDB = { db, ref, push };
+  window.firebaseDB = { db, ref, push, runTransaction };
 </script>
 
 
 </body>
 </html>
+
 
 
 
