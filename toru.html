@@ -440,8 +440,11 @@ function renderInventory(){
     rowCtrl.querySelector('.btnStore').addEventListener('click', async ()=>{
        try { assertNotPaused(); } catch(_) { return; }
       if (window.firebaseDB){
-        const { db, ref, push } = window.firebaseDB;
-        await push(ref(db, `warehouse/${TEAM}`), { item:name, count:1, ts:Date.now() });
+        const { db, ref, runTransaction, push } = window.firebaseDB;
+   // ① 集計ノードへ原子的に +1
+   await runTransaction(ref(db, `warehouse/${TEAM}/byItem/${name}`), cur => (cur || 0) + 1);
+   // ②（任意）ログ保存：可視化や監査用
+   await push(ref(db, `warehouse/${TEAM}/logs`), { item:name, delta:+1, ts:Date.now(), src:'farm' });
         // インベントリから1つ減らす
         inventory.total = Math.max(0, inventory.total - 1);
         inventory.byName[name] = Math.max(0, (inventory.byName[name]||0) - 1);
@@ -553,7 +556,7 @@ function addHarvestToInv({ name }){
   </script>
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
-  import { getDatabase, ref, push, onValue } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js";
+  import { getDatabase, ref, push, onValue, runTransaction } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js";
 
   // ★必ず databaseURL を入れる！
   const firebaseConfig = {
@@ -570,7 +573,7 @@ function addHarvestToInv({ name }){
   const db  = getDatabase(app);
 
   // 他スクリプトが使うために公開（Authは載せない）
-  window.firebaseDB = { db, ref, push, onValue };
+  window.firebaseDB = { db, ref, push, onValue, runTransaction };
 
   /* === 一時停止フック（DBのみでOK） === */
   (function installGlobalPause(db){
@@ -612,6 +615,7 @@ function addHarvestToInv({ name }){
 
 </body>
 </html>
+
 
 
 
