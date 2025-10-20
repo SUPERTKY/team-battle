@@ -202,34 +202,79 @@ const TEAM = (() => {
 
 
 const SEEDS = [
+
   {
-    key: 'spicy', label: '辛果',
-    stages: ['assets/karai-kudamono.png','assets/karai-kudamono.png','assets/karai-kudamono.png'],
-    growMs: [4000, 6000],
-    // ★ 収穫時に落とす素材（例）
+    key: 'firepepper',
+    label: 'ファイアペッパー',
+    stages: ['assets/syokubutu/nae.png','assets/syokubutu/tiisaiki.png','assets/syokubutu/faia-peppa-.png'],
+    growMs: [4000, 7000],
     drops: [
-      { name:'キャベツ',  min:1, max:2, chance:1   }, // 必ず1〜2個
-      { name:'トマト',    min:0, max:1, chance:0.5 }  // 50%で0〜1個
+      { name:'ファイアペッパー', min:1, max:2, chance:0.85 },
+      { name:'ペッパーシード', qty:1, chance:0.5 }
     ]
   },
   {
-    key: 'berry', label: '木の実',
-    stages: ['assets/berry.png','assets/berry.png','assets/berry.png'],
-    growMs: [3000, 5000],
+    key: 'moonberry',
+    label: 'ムーンベリー',
+    stages: ['assets/syokubutu/nae.png','assets/syokubutu/tiisaiki.png','assets/syokubutu/mu-nberi-.png'],
+    growMs: [3500, 6000],
     drops: [
-      { name:'果汁',    min:1, max:2, chance:0.8 },
-      { name:'小枝',    qty:1,           chance:0.4 }
+      { name:'ムーンベリー', min:1, max:3, chance:0.9 },
+      { name:'ベリージュース', qty:1, chance:0.4 }
     ]
   },
   {
-    key: 'bean', label: '豆',
-    stages: ['assets/bean.png','assets/bean.png','assets/bean.png'],
-    growMs: [2000, 4000],
+    key: 'sunleaf',
+    label: 'サンリーフ',
+    stages: ['assets/syokubutu/nae.png','assets/syokubutu/tiisaiki.png','assets/syokubutu/sanri-fu.png'],
+    growMs: [3000, 5500],
     drops: [
-      { name:'豆さや',  min:1, max:3, chance:1   },
-      '豆の葉' // 文字だけなら1個固定で落ちます
+      { name:'サンリーフ', min:1, max:2, chance:0.8 },
+      { name:'サンフラワー', qty:1, chance:0.35 }
     ]
   },
+  {
+    key: 'crystalfruit',
+    label: 'クリスタルフルーツ',
+    stages: ['assets/syokubutu/nae.png','assets/syokubutu/tiisaiki.png','assets/syokubutu/kurisutarufuru-tu.png'],
+    growMs: [6000, 9000],
+    drops: [
+      { name:'クリスタルフルーツ', min:1, max:2, chance:0.75 },
+      { name:'クリスタルコア', qty:1, chance:0.5 }
+    ]
+  },
+  {
+    key: 'mistherb',
+    label: 'ミストハーブ',
+    stages: ['assets/syokubutu/nae.png','assets/syokubutu/tiisaiki.png','assets/syokubutu/misutoha-bu.pngg'],
+    growMs: [3200, 5000],
+    drops: [
+      { name:'ミストリーフ', min:1, max:2, chance:0.8 },
+      { name:'ミストドロップ', qty:1, chance:0.45 }
+    ]
+  },
+  {
+    key: 'goldgrain',
+    label: 'ゴールドグレイン',
+    stages: ['assets/syokubutu/komugi1.png','assets/syokubutu/komugi2.png','assets/syokubutu/komugi3.png'],
+    growMs: [4500, 8000],
+    drops: [
+      { name:'ゴールドグレイン', min:1, max:3, chance:0.85 },
+      { name:'グレインフラワー', qty:1, chance:0.4 }
+    ]
+  },
+  {
+    key: 'starrice',
+    label: 'スターライス',
+    stages: ['assets/syokubutu/ine1.png','assets/syokubutu/ine2.png','assets/syokubutu/ine3.png'],
+    growMs: [5000, 7500],
+    drops: [
+      { name:'スターライス', min:2, max:4, chance:0.9 },
+      { name:'ライスヌカ', qty:1, chance:0.35 }
+    ]
+  }
+
+
 ];
 
 let currentSeedKey = SEEDS[0].key;
@@ -615,6 +660,7 @@ function addHarvestToInv({ name }){
 
 </body>
 </html>
+
 
 
 
