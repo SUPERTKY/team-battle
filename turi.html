@@ -105,10 +105,41 @@
   transition: opacity .2s ease, transform .2s ease;
 }
 .toast.show{ opacity:1; transform:translateX(-50%) translateY(-6px); }
+/* === Get Feed（ゲット報告） === */
+.getFeed{
+  position:fixed; left:50%; bottom:14px; transform:translateX(-50%);
+  z-index:40; display:flex; flex-direction:column; align-items:center;
+  gap:8px; pointer-events:none;
+}
+.getTitle{
+  background:#0b1c26f0; color:#e8fbff; border:1px solid #7ee0ff55;
+  border-radius:999px; padding:6px 12px; font-weight:700;
+  backdrop-filter: blur(6px);
+}
+.getStack{
+  display:flex; flex-direction:column; align-items:center; gap:6px;
+}
+.getItem{
+  width:68px; height:68px; border-radius:12px; overflow:hidden;
+  background:#041018; border:1px solid #7ee0ff33; padding:6px;
+  display:flex; align-items:center; justify-content:center;
+  box-shadow:0 6px 18px rgba(0,0,0,.35);
+  animation: getPop .18s ease-out;
+}
+.getItem img{ max-width:100%; max-height:100%; display:block; }
+@keyframes getPop{ from{ transform:translateY(8px) scale(.92); opacity:.0 }
+                   to{   transform:translateY(0)   scale(1);   opacity:1 } }
+.getHidden{ display:none !important; }
 
 </style>
 </head>
 <body>
+  <!-- Get Feed: ゲット報告 -->
+<div id="getFeed" class="getFeed getHidden" aria-live="polite">
+  <div id="getStack" class="getStack"></div>
+  <div id="getTitle" class="getTitle">ゲット！</div>
+</div>
+
   <section class="stage" id="stage">
     <img id="sand" class="layer" src="assets/sand.png" alt="砂" draggable="false">
     <img id="waterBase" class="layer" src="assets/water_background_80percent.png" alt="水" draggable="false">
@@ -502,6 +533,8 @@ function addCatchToInv({rank, species, sizePx}){
   saveInv();
   renderInventory();
   showToast(`+1 ${species} を釣った！（合計 ${inventory.bySpecies[species]}）`);
+    pushGetReport(species); // ★ゲット報告に追加（画像を積む）
+
 }
 
 
@@ -588,6 +621,62 @@ function showToast(html){
   clearTimeout(showToast._timer);
   showToast._timer = setTimeout(()=> t.classList.remove('show'), 1600);
 }
+// === ゲット報告（Get Feed） ===
+const GET_MAX = 3;              // 同時表示の上限
+const GET_LIFETIME = 4500;      // 自動消滅までの時間(ms)
+
+const SPECIES_IMG = {
+  "マグロ": "assets/fish/maguro.png",
+  "ブルーギル": "assets/fish/bluegill.png",
+  "フナ": "assets/fish/funa.png",
+  "オイカワ": "assets/fish/oikawa.png",
+  "ニジマス": "assets/fish/nijimasu.png",
+  "ブラックバス": "assets/fish/blackbass.png",
+  "コイ": "assets/fish/koi.png",
+  "イトウ": "assets/fish/ito.png",
+  "アカメ": "assets/fish/akame.png",
+  "サクラマス": "assets/fish/sakuramasu.png",
+  "シーラカンス": "assets/fish/coelacanth.png",
+  "ドラゴンフィッシュ": "assets/fish/dragonfish.png",
+  "メガサーモン": "assets/fish/megasalmon.png"
+};
+
+function pushGetReport(species){
+  const wrap = document.getElementById('getFeed');
+  const stack = document.getElementById('getStack');
+  const title = document.getElementById('getTitle');
+  if(!wrap || !stack || !title) return;
+
+  // 表示を有効化
+  wrap.classList.remove('getHidden');
+
+  // アイテム生成（新しいものは上に積む＝先頭に追加）
+  const box = document.createElement('div');
+  box.className = 'getItem';
+  const img = document.createElement('img');
+  img.alt = species;
+  img.src = SPECIES_IMG[species] || 'assets/fish.png'; // フォールバック
+  box.appendChild(img);
+  stack.prepend(box);
+
+  // 上限超過なら「下から」（＝末尾）削除
+  while(stack.children.length > GET_MAX){
+    const last = stack.lastElementChild;
+    if(last){ last.remove(); }
+  }
+
+  // 一定時間で自動消滅
+  const timer = setTimeout(()=>{
+    box.remove();
+    // すべてなくなったら「ゲット！」と全体を非表示にする（＝現在のゲット報告を消す）
+    if(stack.children.length === 0){
+      wrap.classList.add('getHidden');
+    }
+  }, GET_LIFETIME);
+
+  // 早期に外された場合のクリーンアップ（念のため）
+  box.addEventListener('remove', ()=> clearTimeout(timer));
+}
 
 </script>
 <script type="module">
@@ -658,6 +747,7 @@ const firebaseConfig = {
 
 </body>
 </html>
+
 
 
 
