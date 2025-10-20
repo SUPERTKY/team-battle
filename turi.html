@@ -130,6 +130,32 @@
 @keyframes getPop{ from{ transform:translateY(8px) scale(.92); opacity:.0 }
                    to{   transform:translateY(0)   scale(1);   opacity:1 } }
 .getHidden{ display:none !important; }
+/* === Get Feed を左下 & 画像サイズ拡大に上書き === */
+:root{
+  /* 画像サイズをここで調整（例: 96px / 108px / 120px など） */
+  --get-size: 108px;
+}
+
+.getFeed{
+  left:14px;           /* 中央→左端へ */
+  bottom:14px;         /* そのまま下端 */
+  transform:none;      /* 中央寄せ解除 */
+  align-items:flex-start;
+}
+
+.getStack{
+  align-items:flex-start; /* 左寄せ */
+}
+
+.getItem{
+  width:var(--get-size);
+  height:var(--get-size);
+}
+
+/* 「ゲット！」のバッジも左寄せに */
+.getTitle{
+  align-self:flex-start;
+}
 
 </style>
 </head>
@@ -750,6 +776,7 @@ const firebaseConfig = {
 
 </body>
 </html>
+
 
 
 
