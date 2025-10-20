@@ -558,7 +558,7 @@ function addCatchToInv({rank, species, sizePx}){
   inventory.bySpecies[species] = (inventory.bySpecies[species]||0)+1;
   saveInv();
   renderInventory();
-  showToast(`+1 ${species} を釣った！（合計 ${inventory.bySpecies[species]}）`);
+  
     pushGetReport(species); // ★ゲット報告に追加（画像を積む）
 
 }
@@ -776,6 +776,7 @@ const firebaseConfig = {
 
 </body>
 </html>
+
 
 
 
