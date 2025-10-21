@@ -240,21 +240,53 @@ const TEAM = (() => {
 
     // ===== モンスター定義（ここに種類を増やせる） =====
     const MONSTERS = [
-      {
-        id: "slime",
-        name: "スライム",
-        strength: 5.0, // 強さ（大きいほど敵が強い）
-        frames: ["assets/suraimu1frame.png", "assets/suraimu2frame.png"],
-        drops: ["スライム"], // ★初期は「スライム」食材。複数OK（例: ["スライム","ねばねば草"]）
-      },
-      // 追加例：
-      // {
-      //   id: "goblin",
-      //   name: "ゴブリン",
-      //   strength: 1.3,
-      //   frames: ["assets/goblin1.png", "assets/goblin2.png"],
-      //   drops: ["硬い肉","骨"],
-      // },
+
+        {
+    id: "flame_wolf",
+    name: "フレイムウルフ",
+    strength: 3.0,
+          frames: ["assets/hureimuuruhu1frame.png", "assets/hureimuuruhu2frame.png"],
+    drops: ["フレイムグリース","フレイムメンブレン"]
+          
+  },
+
+ {
+    id: "shadow_bat",
+    name: "シャドウバット",
+    strength: 2.5,
+   frames: ["assets/teki/syadoubatto1frame.png", "assets/teki/syadoubaddo2frame.png"],
+    drops: ["シャドウフルーツ","ナイトハニー"]
+   
+  },
+{
+    id: "giant_beetle",
+    name: "ジャイアントビートル",
+    strength: 3.5,
+   frames: ["assets/teki/zyainantbi-toru1frame.png", "assets/teki/zyaiantbi-toru2frame.png"],
+    drops: ["ビートルハニー","ビートルナッツ"]
+  },
+{
+    id: "moon_spirit",
+    name: "ムーンスピリット",
+    strength: 4.0,
+   frames: ["assets/teki/mu-nsupiritto1frame.png", "assets/teki/mu-nsupiritto1frame.png"],
+    drops: ["ムーンパウダー","スピリットエキス"]
+  },
+{
+    id: "glow_worm",
+    name: "グロウワーム",
+    strength: 1.5,
+   frames: ["assets/teki/gurouwa-mu1frame.png", "assets/teki/gurouwa-mu2frame.png"],
+    drops: ["グロウジェル","ライトダスト"]
+  },
+ {
+    id: "abyss_dragon",
+    name: "アビスドラゴン",
+    strength: 5.0,
+    frames: ["assets/teki/abisudoragon1frame.png", "assets/teki/abisudoragon2frame.png"],
+    drops: ["ドラゴンミート","ドラゴンエッグ"]
+  }
+
     ];
 
     // ===== 調整用パラメータ =====
@@ -702,6 +734,7 @@ addToInventory(item, 1);
 
 </body>
 </html>
+
 
 
 
