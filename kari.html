@@ -193,6 +193,41 @@
     }
     @keyframes toast-in{ from{opacity:0; transform:translate(-50%,-6px)} to{opacity:1; transform:translate(-50%,0)} }
     @keyframes toast-out{ to{ opacity:0; transform:translate(-50%,-8px) } }
+    /* ===== ゲット報告フィード（左下スタック） ===== */
+.loot-feed{
+  position:fixed; left:12px; bottom:12px; z-index:2400;
+  display:flex; flex-direction:column-reverse; /* 下に追加→上に積む */
+  gap:8px; pointer-events:none; /* クリック貫通 */
+}
+
+/* 個別カード */
+.loot-card{
+  min-width: 220px;
+  max-width: min(60vw, 360px);
+  padding:10px 12px; border-radius:12px;
+  background:#0e1320f2; color:#eaf6ff;
+  border:1px solid rgba(126,224,255,0.18);
+  box-shadow: 0 10px 26px rgba(0,0,0,0.45);
+  font:700 13px/1.25 system-ui,-apple-system,"Noto Sans JP",sans-serif;
+  transform-origin: bottom left;
+  animation: loot-in 220ms ease-out;
+}
+
+/* 小さな補助情報（時刻など） */
+.loot-meta{ font-weight:600; opacity:.7; font-size:11px; margin-top:4px }
+
+/* 表示→退場 */
+@keyframes loot-in{
+  from{ opacity:0; transform: translateY(6px) scale(.98) }
+  to  { opacity:1; transform: translateY(0)   scale(1) }
+}
+.loot-card.fade-out{
+  animation: loot-out 260ms ease forwards;
+}
+@keyframes loot-out{
+  to{ opacity:0; transform: translateY(8px) scale(.98) }
+}
+
   </style>
 </head>
 <body>
@@ -228,6 +263,8 @@
 <div class="inv-hud">
    <button id="invBtn" class="inv-btn">🎣 インベントリ</button>
  </div>
+<!-- ゲット報告フィード（左下） -->
+<div id="lootFeed" class="loot-feed" aria-live="polite"></div>
 
   <script>
     // === 共通 TEAM 解決（?team=2 など → localStorage → 既定 'team1'） ===
@@ -319,6 +356,45 @@ const invPanel = document.getElementById('invPanel');
 const invBtn   = document.getElementById('invBtn');
 const invMeta  = document.getElementById('invMeta');
 const invList  = document.getElementById('invList');
+// ===== ゲット報告フィード =====
+const lootFeedRoot = document.getElementById('lootFeed');
+const LOOT_MAX = 8;          // 最大表示数
+const LOOT_LIFETIME = 5200;  // 自動消去までの時間(ms)
+
+function pushGetReport(text){
+  if(!lootFeedRoot) return;
+
+  // 要素生成
+  const card = document.createElement('div');
+  card.className = 'loot-card';
+  const now = new Date();
+  const hh = now.getHours().toString().padStart(2,'0');
+  const mm = now.getMinutes().toString().padStart(2,'0');
+
+  card.innerHTML = `
+    <div class="loot-text">${text}</div>
+    <div class="loot-meta">${hh}:${mm}</div>
+  `;
+
+  // 追加（下側に差し込まれる＝上に積まれる）
+  lootFeedRoot.appendChild(card);
+
+  // 上限超過 → いちばん下（＝最古）を削除
+  while(lootFeedRoot.children.length > LOOT_MAX){
+    const oldest = lootFeedRoot.firstElementChild; // column-reverseなので最古が"first"
+    if (oldest){
+      oldest.classList.add('fade-out');
+      setTimeout(()=> oldest.remove(), 260);
+    }
+  }
+
+  // 自動消去
+  setTimeout(()=>{
+    if (!card.isConnected) return;
+    card.classList.add('fade-out');
+    setTimeout(()=> card.remove(), 260);
+  }, LOOT_LIFETIME);
+}
 
 function loadInv(){
   try{
@@ -345,9 +421,8 @@ function addToInventory(name, qty=1){
   inv.byItem[name] = (inv.byItem[name]||0) + qty;
   saveInv();
   renderInventory();
-  if (typeof showToast === 'function'){
-    showToast(`+${qty} ${name} を入手（合計 ${inv.byItem[name]}）`);
-  }
+pushGetReport(`+${qty} ${name} を入手（合計 ${inv.byItem[name]}）`);
+
 }
 
 function renderInventory(){
@@ -602,26 +677,17 @@ renderInventory();
       };
     }
 
-    function dropLoot(mon, atX, atY){
-      // mon.drops から 1〜2個ランダムでドロップ
-      const count = Math.random() < 0.35 ? 2 : 1;
-      for (let i=0;i<count;i++){
-        const item = pick(mon.drops);
-        const el = document.createElement("div");
-        // 既存の for ループ内、item を決めた直後に追加
-addToInventory(item, 1);
+function dropLoot(mon, atX, atY){
+  // mon.drops から 1〜2個ランダムでドロップ
+  const count = Math.random() < 0.35 ? 2 : 1;
+  for (let i=0;i<count;i++){
+    const item = pick(mon.drops);
+    addToInventory(item, 1);
+    // 左下フィードへ報告
+    pushGetReport(`入手：${item}`);
+  }
+}
 
-        el.className = "loot";
-        el.textContent = `入手：${item}`;
-        // 表示位置（撃破位置のちょい上）
-        const x = atX + ACTOR_WIDTH/2 - 36 + rand(-14,14);
-        const y = atY - 6 + rand(-6,6);
-        el.style.left = `${x}px`;
-        el.style.top  = `${y}px`;
-        actorsLayer.appendChild(el);
-        setTimeout(()=> el.remove(), 1100);
-      }
-    }
 
     function endBattle(playerWon){
       battleActive = false;
@@ -734,6 +800,7 @@ addToInventory(item, 1);
 
 </body>
 </html>
+
 
 
 
