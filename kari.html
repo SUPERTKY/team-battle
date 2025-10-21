@@ -421,7 +421,8 @@ function addToInventory(name, qty=1){
   inv.byItem[name] = (inv.byItem[name]||0) + qty;
   saveInv();
   renderInventory();
-pushGetReport(`+${qty} ${name} を入手（合計 ${inv.byItem[name]}）`);
+pushGetReport(`+${qty} ${name}`);
+
 
 }
 
@@ -682,11 +683,11 @@ function dropLoot(mon, atX, atY){
   const count = Math.random() < 0.35 ? 2 : 1;
   for (let i=0;i<count;i++){
     const item = pick(mon.drops);
+    // ここで在庫追加 → addToInventory 内で "+1 アイテム名" を1回だけ報告
     addToInventory(item, 1);
-    // 左下フィードへ報告
-    pushGetReport(`入手：${item}`);
   }
 }
+
 
 
     function endBattle(playerWon){
@@ -800,6 +801,7 @@ function dropLoot(mon, atX, atY){
 
 </body>
 </html>
+
 
 
 
