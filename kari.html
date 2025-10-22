@@ -222,8 +222,12 @@
 
 .gauge{
   position:relative; height:28px; border-radius:999px; overflow:hidden;
-  background:#0a0f1a; border:1px solid #ffffff14;
+  /* 赤側を常に全面に表示（残りが赤に見える） */
+  background: linear-gradient(90deg,#ef4444,#f97316);
+  border:1px solid #ffffff14;
 }
+
+
 .gauge .bar{
   position:absolute; left:0; top:0; bottom:0; width:100%;
   transform-origin:left center;
@@ -346,6 +350,9 @@ const TEAM = (() => {
     const ENEMY_BASE_PER_SEC = 0.35; // 敵の常時押し（％/秒）
     const ENEMY_BURST_POW   = 1.2;   // 敵のバースト1回の押し量（％）
     const BURST_MIN_MS = 340, BURST_MAX_MS = 620;
+// rAF用（グローバル）
+let rafId = null;
+let enemyLastBurst = 0;
 
     // ===== 要素 =====
     const actorsLayer = document.getElementById("actorsLayer");
@@ -383,8 +390,7 @@ function pushGetReport(text){
   const now = new Date();
   const hh = now.getHours().toString().padStart(2,'0');
   const mm = now.getMinutes().toString().padStart(2,'0');
-let rafId = null;
-let enemyLastBurst = 0;
+
   card.innerHTML = `
     <div class="loot-text">${text}</div>
     <div class="loot-meta">${hh}:${mm}</div>
@@ -839,6 +845,7 @@ rafId = null;
 
 </body>
 </html>
+
 
 
 
