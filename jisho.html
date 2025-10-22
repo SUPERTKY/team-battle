@@ -65,7 +65,7 @@ const PRELOAD_RANGE = 2;
 let pages = [];
 let current = 0;
 const imgEl = document.getElementById("img");
-const currentNumEl = document.getElementById("currentNumber");
+let currentNumEl = document.getElementById("currentNumber");
 const totalNumEl = document.getElementById("totalNumber");
 
 function clamp(n,min,max){return Math.max(min,Math.min(max,n));}
@@ -144,8 +144,11 @@ function enableNumberEdit(){
         val=clamp(parseInt(input.value,10)||current,0,pages.length-1);
         span.textContent=String(val);
         input.replaceWith(span);
+      
+      currentNumEl = span;
         show(val);
-      }else{span.textContent=String(current);input.replaceWith(span);}
+      }else{span.textContent=String(current);input.replaceWith(span);
+currentNumEl = span;}
     };
     input.addEventListener("keydown",e=>{
       if(e.key==="Enter"){e.preventDefault();finalize(true);}
@@ -181,5 +184,6 @@ function wireControls(){
 </script>
 </body>
 </html>
+
 
 
