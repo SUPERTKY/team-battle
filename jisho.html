@@ -34,14 +34,14 @@
     <div class="page"><img id="img" alt="辞書ページ"></div>
   </main>
 
-  <div class="controls" role="group" aria-label="ページ操作">
-    <button class="btn" id="firstBtn" title="最初 (Home)">«</button>
-    <button class="btn" id="prevBtn"  title="前へ (←)">‹</button>
-    <div class="page-indicator" id="indicator" title="クリックしてページ番号入力">
+  <div class="controls">
+    <button class="btn" id="firstBtn">«</button>
+    <button class="btn" id="prevBtn">‹</button>
+    <div class="page-indicator" id="indicator">
       <span id="currentNumber" class="page-number">0</span>/<span id="totalNumber" class="total">...</span>
     </div>
-    <button class="btn" id="nextBtn"  title="次へ (→)">›</button>
-    <button class="btn" id="lastBtn"  title="最後 (End)">»</button>
+    <button class="btn" id="nextBtn">›</button>
+    <button class="btn" id="lastBtn">»</button>
   </div>
 
   <footer>
@@ -50,29 +50,26 @@
 </div>
 
 <script>
-/* ===== 設定 ===== */
-const BASE_DIR = "assets/jisho";  // ← ここを修正
+const BASE_DIR = "assets/jisho";
 const EXT = "png";
 const MAX_DISCOVER = 999;
 const PRELOAD_RANGE = 2;
 
-/* ===== 状態 ===== */
 let pages = [];
-let current = 0; // page0から
+let current = 0;
 const imgEl = document.getElementById("img");
 const currentNumEl = document.getElementById("currentNumber");
 const totalNumEl = document.getElementById("totalNumber");
 
-/* ===== ユーティリティ ===== */
-function clamp(n, min, max){ return Math.max(min, Math.min(max, n)); }
+function clamp(n,min,max){return Math.max(min,Math.min(max,n));}
 function getStartFromURL(){
   const u = new URL(location.href);
-  return parseInt(u.searchParams.get("p") || (u.hash.match(/p=(\\d+)/)?.[1] ?? "0"), 10) || 0;
+  return parseInt(u.searchParams.get("p") || (u.hash.match(/p=(\d+)/)?.[1] ?? "0"), 10) || 0;
 }
 function setURL(p){
   const u = new URL(location.href);
   u.searchParams.set("p", p);
-  history.replaceState(null, "", u);
+  history.replaceState(null,"",u);
 }
 function preloadAround(p){
   for(let d=1; d<=PRELOAD_RANGE; d++){
@@ -87,120 +84,87 @@ function preloadAround(p){
 function exists(url){
   return new Promise(res=>{
     const t = new Image();
-    t.onload = ()=> res(true);
-    t.onerror = ()=> res(false);
-    t.src = url + "?v=" + Math.random().toString(16).slice(2);
+    t.onload=()=>res(true);
+    t.onerror=()=>res(false);
+    t.src=url+"?v="+Math.random().toString(16).slice(2);
   });
 }
-
-/* ===== 連番探索（page0.png, page1.png, ...） ===== */
 async function discover(){
-  pages = [];
-  for(let i=0; i<=MAX_DISCOVER; i++){
-    const url = \`\${BASE_DIR}/page\${i}.\${EXT}\`;
-    const ok = await exists(url);
-    if(!ok){
-      if(pages.length) break; // どこかまで見つかったら、欠番で終了
-      else if(i>0) break;     // 0がなくて1から…などは未対応（必要なら教えてね）
-      continue;
-    }
+  pages=[];
+  for(let i=0;i<=MAX_DISCOVER;i++){
+    const url=`${BASE_DIR}/page${i}.${EXT}`;
+    const ok=await exists(url);
+    if(!ok){ if(pages.length) break; else if(i>0) break; continue; }
     pages.push(url);
   }
-  // 総ページ数（0始まりなので表示は pages.length-1）
-  totalNumEl.textContent = String(pages.length ? pages.length-1 : 0);
+  totalNumEl.textContent=String(pages.length?pages.length-1:0);
 }
-
-/* ===== 表示 ===== */
 function show(n){
-  if(!pages.length) return;
-  current = clamp(n, 0, pages.length-1);
-  imgEl.src = pages[current];
-  currentNumEl.textContent = String(current);
+  if(!pages.length)return;
+  current=clamp(n,0,pages.length-1);
+  imgEl.src=pages[current];
+  currentNumEl.textContent=String(current);
   setURL(current);
   updateButtons();
   preloadAround(current);
 }
 function updateButtons(){
-  const atFirst = current === 0;
-  const atLast  = current === pages.length-1;
-  document.getElementById("firstBtn").disabled = atFirst;
-  document.getElementById("prevBtn").disabled  = atFirst;
-  document.getElementById("nextBtn").disabled  = atLast;
-  document.getElementById("lastBtn").disabled  = atLast;
+  const atFirst=current===0;
+  const atLast=current===pages.length-1;
+  document.getElementById("firstBtn").disabled=atFirst;
+  document.getElementById("prevBtn").disabled=atFirst;
+  document.getElementById("nextBtn").disabled=atLast;
+  document.getElementById("lastBtn").disabled=atLast;
 }
-
-/* ===== ページ番号クリックで入力 ===== */
 function enableNumberEdit(){
-  const indicator = document.getElementById("indicator");
-  indicator.addEventListener("click", ()=>{
-    if(indicator.querySelector("input")) return;
-    const input = document.createElement("input");
-    input.type = "number";
-    input.className = "input";
-    input.min = "0";
-    input.max = String(Math.max(0, pages.length-1));
-    input.value = String(current);
-
-    const curSpan = document.getElementById("currentNumber");
+  const indicator=document.getElementById("indicator");
+  indicator.addEventListener("click",()=>{
+    if(indicator.querySelector("input"))return;
+    const input=document.createElement("input");
+    input.type="number";
+    input.className="input";
+    input.min="0";
+    input.max=String(pages.length-1);
+    input.value=String(current);
+    const curSpan=document.getElementById("currentNumber");
     curSpan.replaceWith(input);
-    input.focus(); input.select();
-
-    const finalize = (commit)=>{
-      const span = document.createElement("span");
-      span.id = "currentNumber";
-      span.className = "page-number";
-      let val = current;
+    input.focus();input.select();
+    const finalize=(commit)=>{
+      const span=document.createElement("span");
+      span.id="currentNumber";span.className="page-number";
+      let val=current;
       if(commit){
-        val = clamp(parseInt(input.value,10)||current, 0, pages.length-1);
-        span.textContent = String(val);
+        val=clamp(parseInt(input.value,10)||current,0,pages.length-1);
+        span.textContent=String(val);
         input.replaceWith(span);
         show(val);
-      }else{
-        span.textContent = String(current);
-        input.replaceWith(span);
-      }
+      }else{span.textContent=String(current);input.replaceWith(span);}
     };
-    input.addEventListener("keydown", e=>{
-      if(e.key === "Enter"){ e.preventDefault(); finalize(true); }
-      if(e.key === "Escape"){ e.preventDefault(); finalize(false); }
+    input.addEventListener("keydown",e=>{
+      if(e.key==="Enter"){e.preventDefault();finalize(true);}
+      if(e.key==="Escape"){e.preventDefault();finalize(false);}
     });
-    input.addEventListener("blur", ()=> finalize(true), {once:true});
+    input.addEventListener("blur",()=>finalize(true),{once:true});
   });
 }
-
-/* ===== ボタン＆キー操作 ===== */
 function wireControls(){
-  document.getElementById("firstBtn").addEventListener("click", ()=> show(0));
-  document.getElementById("prevBtn").addEventListener("click",  ()=> show(current-1));
-  document.getElementById("nextBtn").addEventListener("click",  ()=> show(current+1));
-  document.getElementById("lastBtn").addEventListener("click",  ()=> show(pages.length-1));
-
-  window.addEventListener("keydown", (e)=>{
-    const tag = (e.target && e.target.tagName) || "";
-    if(tag === "INPUT" || tag === "TEXTAREA") return;
-    if(e.key === "ArrowLeft"){  e.preventDefault(); show(current-1); }
-    if(e.key === "ArrowRight"){ e.preventDefault(); show(current+1); }
-    if(e.key === "Home"){       e.preventDefault(); show(0); }
-    if(e.key === "End"){        e.preventDefault(); show(pages.length-1); }
+  document.getElementById("firstBtn").addEventListener("click",()=>show(0));
+  document.getElementById("prevBtn").addEventListener("click",()=>show(current-1));
+  document.getElementById("nextBtn").addEventListener("click",()=>show(current+1));
+  document.getElementById("lastBtn").addEventListener("click",()=>show(pages.length-1));
+  window.addEventListener("keydown",e=>{
+    const tag=(e.target&&e.target.tagName)||"";
+    if(tag==="INPUT"||tag==="TEXTAREA")return;
+    if(e.key==="ArrowLeft"){e.preventDefault();show(current-1);}
+    if(e.key==="ArrowRight"){e.preventDefault();show(current+1);}
+    if(e.key==="Home"){e.preventDefault();show(0);}
+    if(e.key==="End"){e.preventDefault();show(pages.length-1);}
   });
-
-  // スワイプ（モバイル簡易）
-  let sx=null;
-  document.getElementById("img").addEventListener("touchstart", e=>{ sx = e.touches[0].clientX; }, {passive:true});
-  document.getElementById("img").addEventListener("touchend", e=>{
-    if(sx==null) return;
-    const dx = e.changedTouches[0].clientX - sx;
-    if(Math.abs(dx) > 50){ if(dx > 0) show(current-1); else show(current+1); }
-    sx=null;
-  }, {passive:true});
 }
-
-/* ===== 初期化 ===== */
 (async function init(){
   await discover();
   if(!pages.length){
-    document.querySelector(".page").innerHTML =
-      '<div style="padding:22px;text-align:center;opacity:.85">画像が見つかりません。<br><code>assets/jisho/page0.png</code> からの連番を置いてください。</div>';
+    document.querySelector(".page").innerHTML='<div style="padding:22px;text-align:center;opacity:.85">画像が見つかりません。<br><code>assets/jisho/page0.png</code> からの連番を置いてください。</div>';
     return;
   }
   enableNumberEdit();
