@@ -89,7 +89,13 @@
 .toast.warn{ border-color: var(--warn); color: var(--warn); }
 .toast.ok{ border-color: var(--ok); color: var(--ok); }
 .toast.err{ border-color: var(--err); color: var(--err); }
+/* 追加：タップ強化＆文字選択禁止（フォームは除外） */
+*{ -webkit-tap-highlight-color: transparent; }
+html,body{ -webkit-user-select:none; user-select:none; }
+button, input, select, textarea { -webkit-user-select:auto; user-select:auto; }
 
+/* 追加：ドラッグ対象のタッチ最適化 */
+.drag{ -webkit-user-drag: element; touch-action:none; }
   </style>
 </head>
 <body>
@@ -598,6 +604,7 @@ attachDataBindings(); // ← これ一回だけでOK。以降 TEAM は固定。
   </script>
 </body>
 </html>
+
 
 
 
