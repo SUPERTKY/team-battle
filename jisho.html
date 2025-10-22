@@ -10,18 +10,8 @@
   .wrap{display:grid;grid-template-rows:auto 1fr auto;min-height:100%}
   header,footer{padding:10px 14px;opacity:.9;text-align:center}
   .stage{display:grid;place-items:center;padding:10px}
-  .page{width:100%;max-width:1000px;max-height:80vh;display:grid;place-items:center;border-radius:12px;overflow:hidden;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);overflow:auto;     }
-  .page img{
-  max-width:100%;
-  max-height:none;          /* ← 高さ制限を外す */
-  height:auto;
-  width:auto;
-  object-fit:contain;
-  display:block;
-}
-
-
-
+  .page{width:100%;max-width:1000px;max-height:80vh;display:grid;place-items:center;border-radius:12px;overflow:hidden;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08)}
+  .page img{max-width:100%;max-height:100%;object-fit:contain}
   .controls{display:flex;justify-content:center;align-items:center;gap:8px;flex-wrap:wrap;padding:12px;background:rgba(0,0,0,.3)}
   .btn{border:1px solid var(--btn-br);background:var(--btn-bg);color:var(--text);padding:8px 12px;border-radius:10px;cursor:pointer;font-weight:600}
   .btn:hover{background:var(--btn-hov)}
@@ -184,4 +174,3 @@ function wireControls(){
 </script>
 </body>
 </html>
-
