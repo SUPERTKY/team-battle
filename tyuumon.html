@@ -96,6 +96,18 @@ button, input, select, textarea { -webkit-user-select:auto; user-select:auto; }
 
 /* 追加：ドラッグ対象のタッチ最適化 */
 .drag{ -webkit-user-drag: element; touch-action:none; }
+    /* 追記：文字選択を基本禁止（フォームは除外） */
+html,body{ -webkit-user-select:none; user-select:none; }
+
+/* 追記：チップと名前は改行しない＆溢れを隠す（最終保険） */
+.chip, .row .name{
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+/* 追記：スロットに収まるように内側余白を少し広げる */
+.chip{ padding:8px 12px; }
+
   </style>
 </head>
 <body>
@@ -215,6 +227,37 @@ button, input, select, textarea { -webkit-user-select:auto; user-select:auto; }
     if (paused) throw new Error('PAUSED');
   };
 })(db);
+/* 追記：スロット幅に収まるまでフォントサイズを下げる */
+function fitNoWrapText(textEl, containerEl, opt = {}){
+  const maxPx = opt.maxPx ?? 16;   // 初期フォントサイズ
+  const minPx = opt.minPx ?? 10;   // ここまで下げる
+  textEl.style.whiteSpace = 'nowrap';
+  textEl.style.fontSize = maxPx + 'px';
+  // 少し余白を見込む
+  const maxWidth = Math.max(0, containerEl.clientWidth - 16);
+  let s = maxPx;
+  // 計測ループ
+  while (s > minPx && textEl.scrollWidth > maxWidth){
+    s -= 1;
+    textEl.style.fontSize = s + 'px';
+  }
+}
+/* 追記：最初の空きスロットを返す */
+function firstEmptySlotIdx(){
+  for (let i=0;i<SLOTS;i++){ if (!slots[i]) return i; }
+  return -1;
+}
+
+/* 追記：在庫→スロット（クリックによる即配置） */
+function quickPutFromInv(name){
+  const idx = firstEmptySlotIdx();
+  if (idx === -1){ showToast('空きスロットがありません', 'warn'); return; }
+  if (removeFromInv(name,1)){
+    slots[idx] = { name };
+    renderSlots();
+    showToast(`「${name}」を入れました`, 'ok', 900);
+  }
+}
 
     /* =====================  チーム決定  ===================== */
 const teamLabel = document.getElementById('teamLabel');
@@ -274,40 +317,58 @@ let warehouseAgg = {}; // そのまま { itemName: count, ... } を保持
     const cookMsg = document.getElementById('cookMsg');
     const slots = new Array(SLOTS).fill(null); // 例: [{name:"魚"} or null]
 
-    function initSlots(){
-      slotsEl.innerHTML = '';
-      for (let i=0;i<SLOTS;i++){
-        const s = document.createElement('div');
-        s.className = 'slot';
-        s.dataset.idx = String(i);
-        s.addEventListener('dragover', (e)=>{ e.preventDefault(); });
-        s.addEventListener('drop', onDropToSlot);
-        slotsEl.appendChild(s);
+function initSlots(){
+  slotsEl.innerHTML = '';
+  for (let i=0;i<SLOTS;i++){
+    const s = document.createElement('div');
+    s.className = 'slot';
+    s.dataset.idx = String(i);
+    // クリックで戻す
+    s.addEventListener('click', ()=>{
+      if (slots[i]){
+        addToInv(slots[i].name,1);
+        slots[i] = null;
+        renderSlots();
+        showToast('スロットから戻しました', 'ok', 900);
       }
-      renderSlots();
+    });
+    slotsEl.appendChild(s);
+  }
+  renderSlots();
+}
+function renderSlots(){
+  for (let i=0;i<SLOTS;i++){
+    const s = slotsEl.children[i];
+    s.classList.toggle('filled', !!slots[i]);
+    s.innerHTML = '';
+    if (slots[i]){
+      const chip = document.createElement('span');
+      chip.className = 'chip';
+      // 名前を包むspanを用意（計測のため）
+      const label = document.createElement('span');
+      label.textContent = slots[i].name;
+      chip.appendChild(label);
+
+      // ×ボタン（クリックで戻す）
+      const x = document.createElement('span');
+      x.className='x'; x.textContent='✕'; x.title='手持ちに戻す';
+      x.addEventListener('click', (e)=>{ 
+        e.stopPropagation();
+        addToInv(slots[i].name,1); slots[i]=null; renderSlots();
+      });
+      chip.appendChild(x);
+
+      s.appendChild(chip);
+
+      // 文字フィット（改行なしで収まるまで縮小）
+      // chip がスロット内で実サイズになった後に実行
+      requestAnimationFrame(()=> fitNoWrapText(label, s, {maxPx:16, minPx:10}));
+    }else{
+      s.textContent = '素材';
     }
-    function renderSlots(){
-      for (let i=0;i<SLOTS;i++){
-        const s = slotsEl.children[i];
-        s.classList.toggle('filled', !!slots[i]);
-        s.innerHTML = '';
-        if (slots[i]){
-          const chip = document.createElement('span');
-          chip.className = 'chip drag';
-          chip.textContent = slots[i].name;
-          chip.setAttribute('draggable','true');
-          chip.addEventListener('dragstart', (e)=> onDragFromSlot(e, i));
-          // ×で戻す
-          const x = document.createElement('span'); x.className='x'; x.textContent='✕';
-          x.title='手持ちに戻す';
-          x.addEventListener('click', ()=>{ addToInv(slots[i].name,1); slots[i]=null; renderSlots(); });
-          chip.appendChild(x);
-          s.appendChild(chip);
-        }else{
-          s.textContent = '素材';
-        }
-      }
-    }
+  }
+}
+
     function clearSlots(){
       // スロットの中身をすべて手持ちに返す
       for (let i=0;i<SLOTS;i++){
@@ -319,64 +380,7 @@ let warehouseAgg = {}; // そのまま { itemName: count, ... } を保持
     }
     clearSlotsBtn.addEventListener('click', clearSlots);
 
-    /* =====================  D&D（インベントリ→スロット / スロット→外） ===================== */
-    function onDragFromInv(e, name){
-      e.dataTransfer.setData('text/plain', JSON.stringify({ src:'inv', name }));
-      e.dataTransfer.effectAllowed = 'copy';
-      e.currentTarget.classList.add('ghost');
-    }
-    function onDragEndInv(e){ e.currentTarget.classList.remove('ghost'); }
 
-    function onDragFromSlot(e, idx){
-      const name = slots[idx]?.name; if (!name) return;
-      e.dataTransfer.setData('text/plain', JSON.stringify({ src:'slot', name, idx }));
-      e.dataTransfer.effectAllowed = 'move';
-      e.currentTarget.classList.add('ghost');
-    }
-
-    function onDropToSlot(e){
-      e.preventDefault();
-      try{
-        const data = JSON.parse(e.dataTransfer.getData('text/plain')||'{}');
-        const idx = Number(e.currentTarget.dataset.idx);
-        if (!Number.isInteger(idx)) return;
-
-        if (data.src === 'inv'){
-          // 在庫から1つ使う
-          if (removeFromInv(data.name,1)){
-            // 空きスロットへのみ
-            if (slots[idx]){
-              // 埋まっていたら戻して、今回のを置く
-              addToInv(slots[idx].name,1);
-            }
-            slots[idx] = { name: data.name };
-            renderSlots();
-          }
-        }else if (data.src === 'slot'){
-          const from = data.idx;
-          if (from === idx) return;
-          // 既存を戻す
-          if (slots[idx]) addToInv(slots[idx].name,1);
-          // 移動
-          slots[idx] = slots[from];
-          slots[from] = null;
-          renderSlots();
-        }
-      }catch(_){}
-    }
-
-    // 画面外/空白にドロップ → スロットからなら手持ちへ戻す
-    document.addEventListener('dragover', (e)=>{ /* allow drop on body */ e.preventDefault(); });
-    document.addEventListener('drop', (e)=>{
-      const dropInsideSlot = e.composedPath().some(el => el && el.classList && el.classList.contains('slot'));
-      if (dropInsideSlot) return;
-      try{
-        const data = JSON.parse(e.dataTransfer.getData('text/plain')||'{}');
-        if (data.src === 'slot' && Number.isInteger(data.idx) && slots[data.idx]){
-          addToInv(slots[data.idx].name,1); slots[data.idx]=null; renderSlots();
-        }
-      }catch(_){}
-    });
 
     /* =====================  調理ロジック  ===================== */
     // 一瞬だけ出すトースト
@@ -426,40 +430,49 @@ if (!dish){
     const invList = document.getElementById('invList');
 
     function renderInv(){
-      invList.innerHTML = '';
-      const entries = Object.entries(inv.byItem).sort((a,b)=> a[0].localeCompare(b[0],'ja'));
-      for (const [name, qty] of entries){
-        const row = document.createElement('div'); row.className='row';
-        const left = document.createElement('div');
-        left.className='kv';
-        const n = document.createElement('span'); n.className='name drag'; n.textContent = name;
-        n.setAttribute('draggable','true');
-        n.addEventListener('dragstart', (e)=> onDragFromInv(e, name));
-        n.addEventListener('dragend', onDragEndInv);
-        const q = document.createElement('span'); q.className='qty'; q.textContent = `× ${qty}`;
-        left.appendChild(n); left.appendChild(q);
+  invList.innerHTML = '';
+  const entries = Object.entries(inv.byItem).sort((a,b)=> a[0].localeCompare(b[0],'ja'));
 
-        const right = document.createElement('div'); right.className='kv';
-        // 料理かどうか
-        const isDish = !!DISH_MASTER[name];
-        if (isDish){
-          const serve = document.createElement('button'); serve.textContent='出す';
-          serve.addEventListener('click', ()=> serveDish(name));
-          right.appendChild(serve);
-        }else{
-          const back = document.createElement('button'); back.textContent='倉庫へ戻す';
-          back.addEventListener('click', ()=> moveToWarehouse(name, 1));
-          right.appendChild(back);
-        }
+  for (const [name, qty] of entries){
+    const row  = document.createElement('div'); row.className='row';
+    row.setAttribute('tabindex','0'); // キーボード操作用（Enter/Space）
 
-        row.appendChild(left); row.appendChild(right);
-        invList.appendChild(row);
-      }
-      if (entries.length === 0){
-        const empty = document.createElement('div'); empty.className='sub'; empty.textContent='（何も持っていません）';
-        invList.appendChild(empty);
-      }
+    const left = document.createElement('div'); left.className='kv';
+    const n    = document.createElement('span'); n.className='name'; n.textContent = name; // ← draggable削除
+    const q    = document.createElement('span'); q.className='qty';  q.textContent = `× ${qty}`;
+    left.appendChild(n); left.appendChild(q);
+
+    const right = document.createElement('div'); right.className='kv';
+    const isDish = !!DISH_MASTER[name];
+
+    if (isDish){
+      const serve = document.createElement('button'); serve.textContent = '出す';
+      serve.addEventListener('click', (e)=>{ e.stopPropagation(); serveDish(name); });
+      right.appendChild(serve);
+    }else{
+      const back = document.createElement('button'); back.textContent = '倉庫へ戻す';
+      back.addEventListener('click', (e)=>{ e.stopPropagation(); moveToWarehouse(name, 1); });
+      right.appendChild(back);
     }
+
+    row.appendChild(left); row.appendChild(right);
+
+    // 行クリックで最初の空きスロットへ投入
+    row.addEventListener('click', ()=> quickPutFromInv(name));
+    // キーボード（Enter/Space）でも投入
+    row.addEventListener('keydown', (e)=>{
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); quickPutFromInv(name); }
+    });
+
+    invList.appendChild(row);
+  }
+
+  if (entries.length === 0){
+    const empty = document.createElement('div'); empty.className='sub'; empty.textContent='（何も持っていません）';
+    invList.appendChild(empty);
+  }
+}
+
 
 function renderWarehouse(){
   warehouseList.innerHTML = '';
@@ -604,6 +617,7 @@ attachDataBindings(); // ← これ一回だけでOK。以降 TEAM は固定。
   </script>
 </body>
 </html>
+
 
 
 
