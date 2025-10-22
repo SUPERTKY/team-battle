@@ -144,16 +144,7 @@
 
     .gauge{ position:relative; height:28px; border-radius:999px; overflow:hidden;
       background:#0a0f1a; border:1px solid #ffffff14; }
-    .gauge .blue{
-      position:absolute; left:0; top:0; bottom:0; width:50%;
-      background: linear-gradient(90deg,#38bdf8,#22c55e);
-      transition: width 40ms linear;
-    }
-    .gauge .red{
-      position:absolute; right:0; top:0; bottom:0; width:50%;
-      background: linear-gradient(90deg,#ef4444,#f97316);
-      transition: width 40ms linear;
-    }
+
     .gauge .divider{
       position:absolute; top:0; bottom:0; width:2px; left:50%;
       background: #ffffff33; box-shadow: 0 0 10px #ffffff55;
@@ -227,6 +218,26 @@
 @keyframes loot-out{
   to{ opacity:0; transform: translateY(8px) scale(.98) }
 }
+/* 旧 .gauge .blue / .gauge .red は削除OK */
+
+.gauge{
+  position:relative; height:28px; border-radius:999px; overflow:hidden;
+  background:#0a0f1a; border:1px solid #ffffff14;
+}
+.gauge .bar{
+  position:absolute; left:0; top:0; bottom:0; width:100%;
+  transform-origin:left center;
+  transform: scaleX(0.5);                 /* p=50% 初期 */
+  background: linear-gradient(90deg,#38bdf8,#22c55e);
+  will-change: transform;                  /* GPUに寄せる */
+}
+.gauge .divider{
+  position:absolute; top:0; bottom:0; width:2px; left:50%;
+  transform: translateX(0);                /* rAFで動かす */
+  background:#ffffff33;
+  box-shadow:none;                         /* 影重いので軽く */
+  will-change: transform;
+}
 
   </style>
 </head>
@@ -246,11 +257,10 @@
       <div class="vs-row">
         <span>あなた（青）</span><span>VS</span><span id="enemyNameLbl">モンスター（赤）</span>
       </div>
-      <div class="gauge" id="gauge">
-        <div class="blue" id="blueFill"></div>
-        <div class="red"  id="redFill"></div>
-        <div class="divider" id="divider"></div>
-      </div>
+<div class="gauge" id="gauge">
+  <div class="bar" id="blueBar"></div>
+  <div class="divider" id="divider"></div>
+</div>
       <div class="tap-hint">このパネルを連打！ 押し切れば勝ち（撃破と同時にドロップ）</div>
     </div>
   </div>
@@ -341,10 +351,13 @@ const TEAM = (() => {
     const actorsLayer = document.getElementById("actorsLayer");
     const hudMask = document.getElementById("hudMask");
     const hud = document.getElementById("hud");
-    const blueFill = document.getElementById("blueFill");
-    const redFill  = document.getElementById("redFill");
-    const divider  = document.getElementById("divider");
-    const gaugeEl  = document.getElementById("gauge");
+// 置き換え：blueFill / redFill は使わない
+const gaugeEl  = document.getElementById("gauge");
+const blueBar  = document.getElementById("blueBar");
+const divider  = document.getElementById("divider");
+
+
+ 
     const enemyNameLbl = document.getElementById("enemyNameLbl");
 // ===== インベントリ =====
 // ===== インベントリ（TURI見た目） =====
@@ -370,7 +383,8 @@ function pushGetReport(text){
   const now = new Date();
   const hh = now.getHours().toString().padStart(2,'0');
   const mm = now.getMinutes().toString().padStart(2,'0');
-
+let rafId = null;
+let enemyLastBurst = 0;
   card.innerHTML = `
     <div class="loot-text">${text}</div>
     <div class="loot-meta">${hh}:${mm}</div>
@@ -394,6 +408,45 @@ function pushGetReport(text){
     card.classList.add('fade-out');
     setTimeout(()=> card.remove(), 260);
   }, LOOT_LIFETIME);
+}
+// 敵の押しを rAF で回す（新規追加）
+function startEnemyLoop(enemyBasePerSec, burstPow){
+  cancelAnimationFrame(rafId);
+  let last = performance.now();
+  enemyLastBurst = last;
+
+  const loop = (now)=>{
+    if (!battleActive) return;
+
+    // 経過時間(秒)を算出（dtに上限をかけて暴走防止）
+    const dt = Math.min(0.05, (now - last) / 1000);
+    last = now;
+
+    // 常時押し（秒間％ → フレーム分）
+    p -= enemyBasePerSec * dt;
+
+    // バースト（ランダム間隔）
+    if (now - enemyLastBurst > rand(BURST_MIN_MS, BURST_MAX_MS)){
+      p -= burstPow;
+      enemyLastBurst = now;
+
+      // 軽量な演出トグル
+      gaugeEl.classList.remove("enemy-throb");
+      void gaugeEl.offsetWidth; // reflowで再適用
+      gaugeEl.classList.add("enemy-throb");
+    }
+
+    if (p <= 0){
+      renderGauge();
+      endBattle(false); // 敗北
+      return;
+    }
+
+    renderGauge();
+    rafId = requestAnimationFrame(loop);
+  };
+
+  rafId = requestAnimationFrame(loop);
 }
 
 function loadInv(){
@@ -620,12 +673,14 @@ renderInventory();
     let battleActive = false, battleTarget = null, enemyTimer = null;
     let p = 50; // 青の前線位置（0〜100）
 
-    function renderGauge(){
-      const clamped = Math.max(0, Math.min(100, p));
-      blueFill.style.width = clamped + "%";
-      redFill.style.width  = (100 - clamped) + "%";
-      divider.style.left   = clamped + "%";
-    }
+// p は 0〜100（既存と同じ）
+function renderGauge(){
+  const clamped = Math.max(0, Math.min(100, p));
+  // width を変えず transform だけ更新（レイアウト回避）
+  blueBar.style.transform = `scaleX(${clamped/100})`;
+  divider.style.transform = `translateX(${clamped - 50}%)`;
+}
+
 
     function startBattle(targetImg){
       battleActive = true;
@@ -637,32 +692,13 @@ renderInventory();
       hudMask.style.display = "flex";
 
       // 敵の強さで難易度スケール
-      const s = targetImg.__mon.strength || 1.0;
-      const enemyBasePerFrame = (ENEMY_BASE_PER_SEC * s) / 60;
-      const burstPow = ENEMY_BURST_POW * s;
+// 新コード（rAFを起動）
+const s = targetImg.__mon.strength || 1.0;
+const enemyBasePerSec = ENEMY_BASE_PER_SEC * s; // 秒間％のまま
+const burstPow = ENEMY_BURST_POW * s;
 
-      // 敵の押し（60fps相当）
-      let lastBurstAt = performance.now();
-      enemyTimer = setInterval(()=>{
-        if (!battleActive) return;
-        p -= enemyBasePerFrame; // 敵が押す＝左へ
+startEnemyLoop(enemyBasePerSec, burstPow);
 
-        const now = performance.now();
-        if (now - lastBurstAt > rand(BURST_MIN_MS, BURST_MAX_MS)){
-          p -= burstPow;
-          lastBurstAt = now;
-          // バチバチ演出
-          gaugeEl.classList.remove("enemy-throb");
-          void gaugeEl.offsetWidth;
-          gaugeEl.classList.add("enemy-throb");
-        }
-
-        if (p <= 0){
-          endBattle(false); // 敗北
-        }else{
-          renderGauge();
-        }
-      }, 16);
 
       // プレイヤーの連打（青を右へ）
       hud.onclick = ()=>{
@@ -691,6 +727,8 @@ function dropLoot(mon, atX, atY){
 
 
     function endBattle(playerWon){
+      cancelAnimationFrame(rafId);  // ← rAF 停止
+rafId = null;
       battleActive = false;
       clearInterval(enemyTimer); enemyTimer = null;
       hudMask.style.display = "none";
@@ -801,6 +839,7 @@ function dropLoot(mon, atX, atY){
 
 </body>
 </html>
+
 
 
 
