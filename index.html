@@ -294,6 +294,25 @@ a.setAttribute("aria-label", `${item.name}を開く`);
   // =============================
   let userState = { team:null };
 
+  // ★★★ ここから追加：起動時のパスワードスキップ判定 ★★★
+  (function trySkipPassword(){
+    const until = Number(localStorage.getItem('pw_ok_until') || 0);
+    const now   = Date.now();
+
+    if (now < until) {
+      // パスワードステップをスキップ
+      document.getElementById("step-password").classList.add("hidden");
+
+      // 既にチーム選択済みならメニューへ直行、未選択ならチーム選択へ
+      const m = (localStorage.getItem('selected_team') || '').match(/^team([1-4])$/);
+      if (m) {
+        initMenu(m[1]); // 数字だけ渡す
+        document.getElementById("step-menu").classList.remove("hidden");
+      } else {
+        document.getElementById("step-team").classList.remove("hidden");
+      }
+    }
+
   // STEP1: パスワード確認
   document.getElementById("passwordBtn").addEventListener("click", async ()=>{
     const input = document.getElementById("passwordInput").value;
@@ -303,6 +322,7 @@ a.setAttribute("aria-label", `${item.name}を開く`);
     const correct = snap.exists() ? snap.val() : null;
 
     if(input === correct){
+       localStorage.setItem('pw_ok_until', String(Date.now() + 24 * 60 * 60 * 1000)); // 24h
       document.getElementById("step-password").classList.add("hidden");
       document.getElementById("step-team").classList.remove("hidden");
     }else{
@@ -326,6 +346,7 @@ document.querySelectorAll(".teamBtn").forEach(btn=>{
 
 </body>
 </html>
+
 
 
 
