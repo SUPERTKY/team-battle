@@ -294,24 +294,20 @@ window.addEventListener("keydown", (e) => {
   let userState = { team:null };
 
   // ★ 起動時のパスワードスキップ判定（IIFEで実行して最後に必ず閉じる）
-  (function trySkipPassword(){
-    const until = Number(localStorage.getItem('pw_ok_until') || 0);
-    const now   = Date.now();
+// ★ 起動時のパスワードスキップ判定（IIFEで実行して最後に必ず閉じる）
+(function trySkipPassword(){
+  const until = Number(localStorage.getItem('pw_ok_until') || 0);
+  const now   = Date.now();
 
-    if (now < until) {
-      // パスワードステップをスキップ
-      document.getElementById("step-password").classList.add("hidden");
+  if (now < until) {
+    // パスワードステップをスキップ
+    document.getElementById("step-password").classList.add("hidden");
 
-      // 既にチーム選択済みならメニューへ直行、未選択ならチーム選択へ
-      const m = (localStorage.getItem('selected_team') || '').match(/^team([1-4])$/);
-      if (m) {
-        initMenu(m[1]); // 数字だけ渡す
-        document.getElementById("step-menu").classList.remove("hidden");
-      } else {
-        document.getElementById("step-team").classList.remove("hidden");
-      }
-    }
-  })(); // ← ← ← これが抜けていた
+    // ★ 修正：常にチーム選択で止める
+    document.getElementById("step-team").classList.remove("hidden");
+  }
+})();
+
 
   // STEP1: パスワード確認
   document.getElementById("passwordBtn").addEventListener("click", async ()=>{
@@ -346,6 +342,7 @@ window.addEventListener("keydown", (e) => {
 
 </body>
 </html>
+
 
 
 
