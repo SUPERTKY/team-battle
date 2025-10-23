@@ -113,6 +113,9 @@
             <label for="dishSelect">料理を選択</label>
             <select id="dishSelect" class="input"></select>
             <div id="dishPreview" class="muted"></div>
+                <div class="row" style="margin-top:8px;">
+      <button id="randomDishBtn" class="btn neutral" title="料理をランダムに選ぶ">🎲 ランダム選択</button>
+    </div>
           </div>
           <div class="row" style="margin-top:12px;">
             <button id="createOrderBtn" class="btn primary">注文を全チームに出す</button>
@@ -256,6 +259,7 @@
 
     const dishSelect    = document.getElementById('dishSelect');
     const dishPreview   = document.getElementById('dishPreview');
+    const randomDishBtn  = document.getElementById('randomDishBtn'); // ← 追加
     const createOrderBtn= document.getElementById('createOrderBtn');
     const createMsg     = document.getElementById('createMsg');
 
@@ -284,6 +288,17 @@
     const pauseBtn = document.getElementById('pauseBtn');
 const resumeBtn = document.getElementById('resumeBtn');
 const pauseStateMsg = document.getElementById('pauseStateMsg');
+// ランダム選択ボタン
+randomDishBtn.addEventListener('click', () => {
+  const names = Object.keys(DISH_MASTER);
+  if (!names.length) {
+    alert('選択できる料理がありません（DISH_MASTERが空です）。');
+    return;
+  }
+  const r = names[Math.floor(Math.random() * names.length)];
+  dishSelect.value = r;
+  updateDishPreview();
+});
 
 function controlRef(){ return ref(db, 'game/control/state'); }
 
@@ -505,6 +520,7 @@ function renderPoints(map){
   </script>
 </body>
 </html>
+
 
 
 
