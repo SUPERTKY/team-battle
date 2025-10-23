@@ -212,11 +212,14 @@ function initMenu(teamNum){
   grid.innerHTML = "";
 
   links.forEach((item, i) => {
-    const a = document.createElement("a");
-    a.className = "btn";
-    a.href = item.href;
-    a.setAttribute("role","listitem");
-    a.setAttribute("aria-label", `${item.name}を開く`);
+const a = document.createElement("a");
+a.className = "btn";
+a.href = item.href;
+a.target = "_blank"; // ← これを追加！
+a.rel = "noopener noreferrer"; // ← セキュリティ上も推奨
+a.setAttribute("role","listitem");
+a.setAttribute("aria-label", `${item.name}を開く`);
+
 
     const icon = document.createElement("div");
     icon.className = "icon";
@@ -323,6 +326,7 @@ document.querySelectorAll(".teamBtn").forEach(btn=>{
 
 </body>
 </html>
+
 
 
 
