@@ -262,12 +262,13 @@ a.setAttribute("aria-label", `${item.name}を開く`);
   });
 
   // キーショートカット
-  window.addEventListener("keydown", (e) => {
-    const idx = links.findIndex(l => l.key === e.key);
-    if (idx !== -1){
-      window.location.href = links[idx].href;
-    }
-  });
+window.addEventListener("keydown", (e) => {
+  const idx = links.findIndex(l => l.key === e.key);
+  if (idx !== -1){
+    window.open(links[idx].href, "_blank", "noopener,noreferrer");
+  }
+});
+
 }
 </script>
 
@@ -275,7 +276,7 @@ a.setAttribute("aria-label", `${item.name}を開く`);
   import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
   import { getDatabase, ref, get, child } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js";
 
-  // ★Firebase 設定（そのまま利用）
+  // Firebase 設定（そのまま）
   const firebaseConfig = {
     apiKey: "AIzaSyDPe5cSCavq5gHopugdOfQ-9_50cTrqmyk",
     authDomain: "school-178c2.firebaseapp.com",
@@ -289,12 +290,10 @@ a.setAttribute("aria-label", `${item.name}を開く`);
   const app = initializeApp(firebaseConfig);
   const db  = getDatabase(app);
 
-  // =============================
   // 画面制御ロジック
-  // =============================
   let userState = { team:null };
 
-  // ★★★ ここから追加：起動時のパスワードスキップ判定 ★★★
+  // ★ 起動時のパスワードスキップ判定（IIFEで実行して最後に必ず閉じる）
   (function trySkipPassword(){
     const until = Number(localStorage.getItem('pw_ok_until') || 0);
     const now   = Date.now();
@@ -312,6 +311,7 @@ a.setAttribute("aria-label", `${item.name}を開く`);
         document.getElementById("step-team").classList.remove("hidden");
       }
     }
+  })(); // ← ← ← これが抜けていた
 
   // STEP1: パスワード確認
   document.getElementById("passwordBtn").addEventListener("click", async ()=>{
@@ -322,7 +322,8 @@ a.setAttribute("aria-label", `${item.name}を開く`);
     const correct = snap.exists() ? snap.val() : null;
 
     if(input === correct){
-       localStorage.setItem('pw_ok_until', String(Date.now() + 24 * 60 * 60 * 1000)); // 24h
+      // 24時間スキップOK
+      localStorage.setItem('pw_ok_until', String(Date.now() + 24 * 60 * 60 * 1000));
       document.getElementById("step-password").classList.add("hidden");
       document.getElementById("step-team").classList.remove("hidden");
     }else{
@@ -331,21 +332,21 @@ a.setAttribute("aria-label", `${item.name}を開く`);
   });
 
   // STEP2: チーム選択 → 直でメニューへ
-document.querySelectorAll(".teamBtn").forEach(btn=>{
-  btn.addEventListener("click", ()=>{
-    userState.team = btn.dataset.team;         // "1" | "2" | "3" | "4"
-    localStorage.setItem('selected_team', 'team' + userState.team); // 永続化
-    initMenu(userState.team);                  // ← ここで数字を渡す
-
-    document.getElementById("step-team").classList.add("hidden");
-    document.getElementById("step-menu").classList.remove("hidden");
+  document.querySelectorAll(".teamBtn").forEach(btn=>{
+    btn.addEventListener("click", ()=>{
+      userState.team = btn.dataset.team;         // "1" | "2" | "3" | "4"
+      localStorage.setItem('selected_team', 'team' + userState.team); // 永続化
+      initMenu(userState.team);                  // 数字を渡す
+      document.getElementById("step-team").classList.add("hidden");
+      document.getElementById("step-menu").classList.remove("hidden");
+    });
   });
-});
-
 </script>
+
 
 </body>
 </html>
+
 
 
 
