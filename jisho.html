@@ -47,19 +47,26 @@ html, body{
   overflow:hidden;
 }
 
-.page{
-  width:100%;
-  height:100%;                        /* ← 残り領域いっぱい */
-  /* max-height:80vh; は削除 */
+.page {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  overflow: hidden;
+  background: rgba(255,255,255,.05);
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 12px;
 }
 
-.page img{
-  width:100%;
-  height:100%;
-  object-fit:contain;                 /* ← 画像全体が一度に見える */
-  display:block;
-  margin:0 auto;
+.page img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  display: block;
+  margin: 0 auto;
 }
+
 
 
 </style>
@@ -240,6 +247,7 @@ window.addEventListener('resize', resizePageBox);
 </script>
 </body>
 </html>
+
 
 
 
