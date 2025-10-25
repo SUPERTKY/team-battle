@@ -32,38 +32,35 @@
 html, body{
   height:100%;
   margin:0;
-  overflow:hidden;         /* 画面全体で固定（スクロールしない） */
+  overflow:hidden;               /* ← 全画面固定（スクロールなし） */
 }
 
-/* ラッパをビューポート高に固定して3分割 */
 .wrap{
   display:grid;
   grid-template-rows: auto 1fr auto;  /* header / main / controls */
-  height:100vh;                       /* 画面全体に収める */
+  height:100vh;                       /* ← 画面全体に収める */
 }
 
-/* ステージ（画像枠）を余白なく広げる */
 .stage{
   display:grid;
   place-items:center;
-  overflow:hidden;                    /* はみ出し防止 */
+  overflow:hidden;
 }
 
-/* 画像カードは、残った領域いっぱい（高さ固定しない） */
 .page{
   width:100%;
-  height:100%;                        /* ステージの残り高さにフィット */
-  max-height:none;                    /* 既存の max-height は外す */
+  height:100%;                        /* ← 残り領域いっぱい */
+  /* max-height:80vh; は削除 */
 }
 
-/* 画像は枠内に全体表示（拡大しすぎない・スクロール不要） */
 .page img{
   width:100%;
   height:100%;
-  object-fit:contain;                 /* 全体が一度に見える */
+  object-fit:contain;                 /* ← 画像全体が一度に見える */
   display:block;
   margin:0 auto;
 }
+
 
 </style>
 </head>
@@ -243,6 +240,7 @@ window.addEventListener('resize', resizePageBox);
 </script>
 </body>
 </html>
+
 
 
 
