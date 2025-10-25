@@ -27,10 +27,10 @@
     color:#111827;
     font-family: system-ui, -apple-system, Segoe UI, Roboto, "Poppins","Noto Sans JP", sans-serif;
 
-    /* 🌟 背景画像設定 */
-    background: #f8fafc url("assets/ryouri.png") center top repeat-y;
-    background-size: 100% auto;  /* 横幅いっぱい、縦方向に繰り返し */
-    background-attachment: fixed; /* スクロールしても背景固定 */
+    /* 🌟 背景画像を「1枚だけ」「全体にフィット」「明るく固定」 */
+    background: #f8fafc url("assets/ryouri.png") center center no-repeat;
+    background-size: cover;       /* 画面いっぱいに拡大縮小して表示 */
+    background-attachment: fixed; /* スクロールしても背景は動かない */
   }
 
   .wrap{ min-height:100%; padding:16px; display:grid; gap:16px; }
@@ -58,7 +58,7 @@
   button{ cursor:pointer }
   button:disabled{ opacity:.6; cursor:not-allowed }
 
-  /* 🌿 常に縦並び */
+  /* 💡 レイアウトは常に縦並び */
   .grid{ display:grid; grid-template-columns:1fr; gap:16px; }
 
   .card{
@@ -175,6 +175,7 @@
   .drag{ -webkit-user-drag: element; touch-action:none; }
   .chip, .row .name{ white-space: nowrap; overflow: hidden; }
 </style>
+
 
 </head>
 <body>
@@ -684,6 +685,7 @@ attachDataBindings(); // ← これ一回だけでOK。以降 TEAM は固定。
   </script>
 </body>
 </html>
+
 
 
 
