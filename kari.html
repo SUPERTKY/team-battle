@@ -242,6 +242,13 @@
   box-shadow:none;                         /* 影重いので軽く */
   will-change: transform;
 }
+/* 逃走（触れなくなって一瞬でフェードイン→消滅） */
+@keyframes flee {
+  0%   { opacity:0; transform: translateY(0)   scale(1) }
+  40%  { opacity:1; transform: translateY(-4px) scale(1.02) }
+  100% { opacity:0; transform: translateY(-10px) scale(.98) }
+}
+.escape { animation: flee 320ms ease forwards; pointer-events:none !important; }
 
   </style>
 </head>
@@ -604,13 +611,16 @@ renderInventory();
 
       // 歩行ループ開始
       scheduleWalk(img);
+scheduleEscape(img);   // ← 追加：寿命が来たら逃走させる
 
       // クリックでバトル
-      img.addEventListener("click", (e)=>{
-        e.stopPropagation();
-        if (battleActive) return;
-        startBattle(img);
-      });
+img.addEventListener("click", (e)=>{
+  e.stopPropagation();
+  if (battleActive) return;
+  cancelEscape(img);      // ← 追加：戦闘に入るので逃走カウント停止
+  startBattle(img);
+});
+
 
       return img;
     }
@@ -689,10 +699,11 @@ function renderGauge(){
 
 
     function startBattle(targetImg){
-      battleActive = true;
-      battleTarget = targetImg;
-      p = 50;
-      renderGauge();
+  battleActive = true;
+  battleTarget = targetImg;
+  cancelEscape(targetImg);  // ← 追加（保険）
+  p = 50;
+  renderGauge();
 
       enemyNameLbl.textContent = `${targetImg.__mon.name}（赤）`;
       hudMask.style.display = "flex";
@@ -732,41 +743,32 @@ function dropLoot(mon, atX, atY){
 
 
 
-    function endBattle(playerWon){
-      cancelAnimationFrame(rafId);  // ← rAF 停止
-rafId = null;
-      battleActive = false;
-      clearInterval(enemyTimer); enemyTimer = null;
-      hudMask.style.display = "none";
+function endBattle(playerWon){
+  cancelAnimationFrame(rafId);
+  rafId = null;
+  battleActive = false;
+  clearInterval(enemyTimer); enemyTimer = null;
+  hudMask.style.display = "none";
 
-      if (!battleTarget || !battleTarget.isConnected){ battleTarget = null; return; }
+  if (!battleTarget || !battleTarget.isConnected){ battleTarget = null; return; }
 
-      const target = battleTarget;
-      battleTarget = null;
+  const target = battleTarget;
+  battleTarget = null;
 
-      // 勝敗で処理
-      if (playerWon){
-        // ドロップ（撃破座標ベース）
-        const atX = parseFloat(target.style.left) || 0;
-        const atY = parseFloat(target.style.top)  || 0;
-        dropLoot(target.__mon, atX, atY);
+  cancelEscape(target);  // ← 追加：確実にタイマー停止
 
+  if (playerWon){
+    const atX = parseFloat(target.style.left) || 0;
+    const atY = parseFloat(target.style.top)  || 0;
+    dropLoot(target.__mon, atX, atY);
+    target.classList.add("vanish");
+    target.addEventListener("animationend", ()=>{ target.remove(); scheduleRespawn(); }, { once:true });
+  }else{
+    target.classList.add("vanish");
+    target.addEventListener("animationend", ()=>{ target.remove(); scheduleRespawn(); }, { once:true });
+  }
+}
 
-        // その場で自然消滅 → 補充
-        target.classList.add("vanish");
-        target.addEventListener("animationend", ()=>{
-          target.remove();
-          scheduleRespawn();
-        }, { once:true });
-      }else{
-        // 敗北：自然消滅 → 補充
-        target.classList.add("vanish");
-        target.addEventListener("animationend", ()=>{
-          target.remove();
-          scheduleRespawn();
-        }, { once:true });
-      }
-    }
 
     // ===== 初期スポーン（6体） =====
     for (let i=0;i<MAX_ACTORS;i++) spawnActor();
@@ -775,6 +777,41 @@ rafId = null;
     setInterval(()=>{
       if (!battleActive && countActors() < MAX_ACTORS) scheduleRespawn();
     }, 3000);
+    // === 逃走（循環）関連 ===
+function scheduleEscape(img){
+  // 出現から一定時間後に逃走（12〜20秒のランダム）
+  const life = rand(12000, 20000);
+  clearTimeout(img.__escapeTimer);
+  img.__escapeTimer = setTimeout(()=>{
+    // まだ存在 & バトル中でなければ逃走
+    if (!img.isConnected) return;
+    if (battleActive && battleTarget === img){
+      // バトル中なら戦闘終了後に改めて寿命をセット
+      scheduleEscape(img);
+      return;
+    }
+    fleeActor(img);
+  }, life);
+}
+
+function cancelEscape(img){
+  if (img && img.__escapeTimer){
+    clearTimeout(img.__escapeTimer);
+    img.__escapeTimer = null;
+  }
+}
+
+function fleeActor(img){
+  if (!img || !img.isConnected) return;
+  // 触れない状態にして逃走演出 → 消滅 → 補充
+  img.style.pointerEvents = 'none';
+  img.classList.add('escape');
+  img.addEventListener('animationend', ()=>{
+    if (img.isConnected) img.remove();
+    scheduleRespawn();
+  }, { once:true });
+}
+
   </script>
   <!-- Firebase（倉庫保存用） -->
 <script type="module">
@@ -845,6 +882,7 @@ rafId = null;
 
 </body>
 </html>
+
 
 
 
