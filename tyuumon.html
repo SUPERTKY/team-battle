@@ -59,7 +59,11 @@
   button:disabled{ opacity:.6; cursor:not-allowed }
 
   /* 💡 レイアウトは常に縦並び */
-  .grid{ display:grid; grid-template-columns:1fr; gap:16px; }
+  .grid {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr; /* 左が広め・右がやや狭め */
+  gap: 16px;
+}
 
   .card{
     background:var(--card);
@@ -685,6 +689,7 @@ attachDataBindings(); // ← これ一回だけでOK。以降 TEAM は固定。
   </script>
 </body>
 </html>
+
 
 
 
