@@ -203,7 +203,7 @@ function initMenu(teamNum){
     { name: "狩り",   desc: "移動", href: "kari.html",    icon: "🦌", key: "2" },
     { name: "採取",   desc: "移動", href: "toru.html",    icon: "🍄", key: "3" },
     // 注文だけ team をクエリに付ける（あれば）
-    { name: "注文",   desc: "移動", href: `tyuumon.html${resolvedNum ? `?team=${resolvedNum}` : ""}`, icon: "🧾", key: "4" },
+    { name: "シェフ",   desc: "移動", href: `tyuumon.html${resolvedNum ? `?team=${resolvedNum}` : ""}`, icon: "🍳", key: "4" },
     { name: "辞書",   desc: "移動", href: "jisho.html",   icon: "📘", key: "5" },
     { name: "オーナー", desc: "管理", href: "o-na-.html",  icon: "👑", key: "6" }
   ];
@@ -342,6 +342,7 @@ window.addEventListener("keydown", (e) => {
 
 </body>
 </html>
+
 
 
 
