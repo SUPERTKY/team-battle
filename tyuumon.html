@@ -178,6 +178,16 @@
   button, input, select, textarea { -webkit-user-select:auto; user-select:auto; }
   .drag{ -webkit-user-drag: element; touch-action:none; }
   .chip, .row .name{ white-space: nowrap; overflow: hidden; }
+    /* 追加：削除ボタンの見た目 */
+button.btn-danger{
+  border-color: var(--err);
+  color: var(--err);
+  background:#fff;
+}
+button.btn-danger:hover{
+  background: rgba(220,38,38,.06); /* var(--err)の薄い背景 */
+}
+
 </style>
 
 
@@ -526,6 +536,33 @@ if (!dish){
       back.addEventListener('click', (e)=>{ e.stopPropagation(); moveToWarehouse(name, 1); });
       right.appendChild(back);
     }
+// （既存）料理なら「出す」、素材なら「倉庫へ戻す」を追加した直後に…
+const del = document.createElement('button');
+del.textContent = '削除';
+del.className = 'btn-danger';
+del.title = '1個だけ削除（Alt+クリックで全て削除）';
+del.addEventListener('click', (e)=>{
+  e.stopPropagation();
+
+  // Alt+クリックで全削除
+  if (e.altKey){
+    const n = inv.byItem[name] || 0;
+    if (!n) return;
+    if (confirm(`「${name}」を ${n} 個すべて削除しますか？`)){
+      removeFromInv(name, n);
+      showToast(`「${name}」を全て削除しました`, 'ok', 1200);
+    }
+    return;
+  }
+
+  // 通常クリックは1個だけ削除
+  if (removeFromInv(name, 1)){
+    showToast(`「${name}」を1個削除しました`, 'ok', 900);
+  }else{
+    showToast('削除できませんでした', 'warn');
+  }
+});
+right.appendChild(del);
 
     row.appendChild(left); row.appendChild(right);
 
@@ -689,6 +726,7 @@ attachDataBindings(); // ← これ一回だけでOK。以降 TEAM は固定。
   </script>
 </body>
 </html>
+
 
 
 
