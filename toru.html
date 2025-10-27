@@ -500,8 +500,7 @@ function renderInventory(){
         const { db, ref, runTransaction, push } = window.firebaseDB;
    // ① 集計ノードへ原子的に +1
    await runTransaction(ref(db, `warehouse/${TEAM}/byItem/${name}`), cur => (cur || 0) + 1);
-   // ②（任意）ログ保存：可視化や監査用
-   await push(ref(db, `warehouse/${TEAM}/logs`), { item:name, delta:+1, ts:Date.now(), src:'farm' });
+
         // インベントリから1つ減らす
         inventory.total = Math.max(0, inventory.total - 1);
         inventory.byName[name] = Math.max(0, (inventory.byName[name]||0) - 1);
@@ -672,6 +671,7 @@ function addHarvestToInv({ name }){
 
 </body>
 </html>
+
 
 
 
