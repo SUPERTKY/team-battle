@@ -135,6 +135,11 @@
           </div>
         </div>
       </div>
+<!-- ★追加：ゲーム全リセット -->
+<div class="row" style="margin-top:10px;">
+  <button id="resetBtn" class="btn warn">ゲーム全リセット（WAREHOUSE / game→points / logs）</button>
+  <div id="resetMsg" class="msg" role="status" aria-live="polite"></div>
+</div>
 
       <!-- 一括操作 -->
       <div class="panel" style="margin-top:14px;">
@@ -265,6 +270,8 @@
 
     const clearAllBtn   = document.getElementById('clearAllBtn');
     const bulkMsg       = document.getElementById('bulkMsg');
+const resetBtn = document.getElementById('resetBtn'); // ★追加
+const resetMsg = document.getElementById('resetMsg'); // ★追加
 
     const sessState = document.getElementById('sessState');
     const sessExp   = document.getElementById('sessExp');
@@ -288,6 +295,33 @@
     const pauseBtn = document.getElementById('pauseBtn');
 const resumeBtn = document.getElementById('resumeBtn');
 const pauseStateMsg = document.getElementById('pauseStateMsg');
+    // ★追加：ゲーム全リセット（WAREHOUSE / game→points / logs）
+resetBtn.addEventListener('click', async ()=>{
+  resetMsg.textContent = '';
+  const s = loadSess();
+  if (!(s && s.ok && s.exp > now())){ 
+    resetMsg.textContent='ログイン有効期限が切れています。'; 
+    resetMsg.className='msg warn'; 
+    return; 
+  }
+
+  if (!confirm('本当にゲーム全リセットを実行しますか？\n・WAREHOUSE を丸ごと削除\n・game/points を削除\n・logs を削除')) return;
+
+  try{
+    await Promise.all([
+      remove(ref(db, 'WAREHOUSE')),
+      remove(ref(db, 'game/points')),
+      remove(ref(db, 'logs'))
+    ]);
+    resetMsg.textContent = 'リセットが完了しました。';
+    resetMsg.className = 'msg ok';
+  }catch(e){
+    console.error(e);
+    resetMsg.textContent = 'リセットに失敗しました（権限/ルールを確認）。';
+    resetMsg.className = 'msg err';
+  }
+});
+
 // ランダム選択ボタン
 randomDishBtn.addEventListener('click', () => {
   const names = Object.keys(DISH_MASTER);
@@ -520,6 +554,7 @@ function renderPoints(map){
   </script>
 </body>
 </html>
+
 
 
 
