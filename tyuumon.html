@@ -628,7 +628,9 @@ right.appendChild(del);
 
 function renderWarehouse(){
   warehouseList.innerHTML = '';
-  const entries = Object.entries(warehouseAgg||{}).sort((a,b)=> a[0].localeCompare(b[0],'ja'));
+   const entries = Object.entries(warehouseAgg||{})
+    .filter(([,qty]) => (qty||0) > 0)
+    .sort((a,b)=> a[0].localeCompare(b[0],'ja'));
   for (const [name, qty] of entries){
     const row = document.createElement('div'); row.className='row';
     const left = document.createElement('div'); left.className='kv';
@@ -680,12 +682,14 @@ async function takeFromWarehouse(name, qty){
   try{ assertNotPaused(); }catch(_){ return; }
   const res = await runTransaction(ref(db, `warehouse/${TEAM}/byItem/${name}`), (cur)=>{
     cur = cur || 0;
-    if (cur < qty) return;      // 在庫不足 → 未コミット
-    return cur - qty;           // 原子的に減算
+    if (cur < qty) return;              // 在庫不足 → 取引中止（committed=false）
+    const next = cur - qty;
+    return next <= 0 ? null : next;     // ★変更：0以下はノード削除
   });
-  if (res.committed && res.snapshot.exists()){
+  if (res.committed){
+    // ★変更：0でノード削除した場合でも committed は true
     addToInv(name, qty);
-  }else{
+  } else {
     showToast('在庫が足りません', 'warn');
   }
 }
@@ -769,6 +773,7 @@ attachDataBindings(); // ← これ一回だけでOK。以降 TEAM は固定。
   </script>
 </body>
 </html>
+
 
 
 
