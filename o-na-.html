@@ -137,7 +137,7 @@
       </div>
 <!-- ★追加：ゲーム全リセット -->
 <div class="row" style="margin-top:10px;">
-  <button id="resetBtn" class="btn warn">ゲーム全リセット（WAREHOUSE / game→points / logs）</button>
+  <button id="resetBtn" class="btn warn">ゲーム全リセット</button>
   <div id="resetMsg" class="msg" role="status" aria-live="polite"></div>
 </div>
 
@@ -305,7 +305,7 @@ resetBtn.addEventListener('click', async ()=>{
     return; 
   }
 
-  if (!confirm('本当にゲーム全リセットを実行しますか？\n・WAREHOUSE を丸ごと削除\n・game/points を削除\n・logs を削除')) return;
+  if (!confirm('本当にゲーム全リセットを実行しますか？')) return;
 
   try{
     await Promise.all([
@@ -554,6 +554,7 @@ function renderPoints(map){
   </script>
 </body>
 </html>
+
 
 
 
