@@ -526,9 +526,7 @@ const api = window.firebaseDB;
   const node = ref(db, `warehouse/${TEAM}/byItem/${name}`);
    await runTransaction(node, cur => (cur || 0) + 1);
    // ②（任意）ログを残す
-   await push(ref(db, `warehouse/${TEAM}/logs`), {
-     item: name, delta: +1, ts: Date.now(), src: 'battle'
-  });
+
 
         // 在庫を1つ減らす
         if (inv.byItem[name]){
@@ -882,6 +880,7 @@ function fleeActor(img){
 
 </body>
 </html>
+
 
 
 
