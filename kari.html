@@ -515,30 +515,44 @@ function renderInventory(){
  `;
 
     // 倉庫（Firebase があれば保存）
-    actionCell.querySelector('.btnStore').addEventListener('click', async ()=>{
-      try{
-const api = window.firebaseDB;
-   if(!api) throw new Error('no-firebase');
-   const { db, ref, runTransaction, push } = api;
-   // 一時停止中なら何もしない（任意）
-   try{ assertNotPaused(); }catch(_){ return; }
-   // ① 集計ノードへ原子的に +1
-  const node = ref(db, `warehouse/${TEAM}/byItem/${name}`);
-   await runTransaction(node, cur => (cur || 0) + 1);
-   // ②（任意）ログを残す
+const btnStore = actionCell.querySelector('.btnStore');
 
+btnStore.addEventListener('click', async (e)=>{
+  const btn = e.currentTarget;
 
-        // 在庫を1つ減らす
-        if (inv.byItem[name]){
-          inv.total--;
-          if (--inv.byItem[name] <= 0) delete inv.byItem[name];
-          saveInv(); renderInventory();
-          showToast?.(`${name} を倉庫にしまいました`);
-        }
-      }catch(e){
-        showToast?.('倉庫にしまうには Firebase の設定が必要です');
-      }
-    });
+  // --- 二重起動ガード ---
+  if (btn.dataset.busy === '1') return;
+  btn.dataset.busy = '1';  // 起動中フラグ
+
+  try{
+    const api = window.firebaseDB;
+    if(!api) throw new Error('no-firebase');
+
+    const { db, ref, runTransaction } = api;
+
+    try{ assertNotPaused(); }catch(_){ 
+      btn.dataset.busy = ''; 
+      return; 
+    }
+
+    const node = ref(db, `warehouse/${TEAM}/byItem/${name}`);
+    await runTransaction(node, cur => (cur || 0) + 1);
+
+    if (inv.byItem[name]){
+      inv.total--;
+      if (--inv.byItem[name] <= 0) delete inv.byItem[name];
+      saveInv();
+      renderInventory();
+      showToast?.(`${name} を倉庫にしまいました`);
+    }
+  }catch(e){
+    showToast?.('倉庫にしまうには Firebase の設定が必要です');
+  }finally{
+    // フラグ解除（エラーでも次に備えて）
+    btn.dataset.busy = '';
+  }
+});
+
 
     // 捨てる
     actionCell.querySelector('.btnDrop').addEventListener('click', ()=>{
@@ -880,6 +894,7 @@ function fleeActor(img){
 
 </body>
 </html>
+
 
 
 
