@@ -311,6 +311,7 @@ resetBtn.addEventListener('click', async ()=>{
     await Promise.all([
       remove(ref(db, 'warehouse')),
       remove(ref(db, 'game/points')),
+      remove(ref(db, 'game/orders'))
 
     ]);
     resetMsg.textContent = 'リセットが完了しました。';
@@ -554,6 +555,7 @@ function renderPoints(map){
   </script>
 </body>
 </html>
+
 
 
 
