@@ -493,24 +493,39 @@ function renderInventory(){
       <button class="btnDrop">捨てる</button>
     `;
 
-    // 倉庫（Firebase があるときだけ動作）
-    rowCtrl.querySelector('.btnStore').addEventListener('click', async ()=>{
-       try { assertNotPaused(); } catch(_) { return; }
-      if (window.firebaseDB){
-        const { db, ref, runTransaction, push } = window.firebaseDB;
-   // ① 集計ノードへ原子的に +1
-   await runTransaction(ref(db, `warehouse/${TEAM}/byItem/${name}`), cur => (cur || 0) + 1);
+const btnStore = rowCtrl.querySelector('.btnStore');
+btnStore.addEventListener('click', async (e)=>{
+  const btn = e.currentTarget;
 
-        // インベントリから1つ減らす
-        inventory.total = Math.max(0, inventory.total - 1);
-        inventory.byName[name] = Math.max(0, (inventory.byName[name]||0) - 1);
-        if (inventory.byName[name] <= 0) delete inventory.byName[name];
-        saveInv(); renderInventory();
-        showToast(`${name} を倉庫にしまいました`);
-      }else{
-        showToast("倉庫連携（Firebase）が未設定です");
-      }
-    });
+  // --- 二重起動ガード（見た目変更なし）---
+  if (btn.dataset.busy === '1') return;
+  btn.dataset.busy = '1';
+
+  try {
+    try { assertNotPaused(); } catch(_) { btn.dataset.busy = ''; return; }
+
+    if (window.firebaseDB){
+      const { db, ref, runTransaction } = window.firebaseDB;
+
+      // ① 倉庫側カウントを原子的に +1
+      await runTransaction(ref(db, `warehouse/${TEAM}/byItem/${name}`), cur => (cur || 0) + 1);
+
+      // ② ローカル在庫を1つ減らす → 再描画（ボタンは作り直され busy も自然リセット）
+      inventory.total = Math.max(0, inventory.total - 1);
+      inventory.byName[name] = Math.max(0, (inventory.byName[name]||0) - 1);
+      if (inventory.byName[name] <= 0) delete inventory.byName[name];
+      saveInv(); renderInventory();
+      showToast(`${name} を倉庫にしまいました`);
+    } else {
+      showToast("倉庫連携（Firebase）が未設定です");
+    }
+  } catch (e2) {
+    showToast("送信に失敗しました");
+  } finally {
+    // 再描画されなかった場合の保険として解除
+    btn.dataset.busy = '';
+  }
+});
 
     // 捨てる
     rowCtrl.querySelector('.btnDrop').addEventListener('click', ()=>{
@@ -671,6 +686,7 @@ function addHarvestToInv({ name }){
 
 </body>
 </html>
+
 
 
 
