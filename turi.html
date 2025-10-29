@@ -593,39 +593,68 @@ function renderInventory(){
 
     // 倉庫にしまう
 // 倉庫にしまう（TEAM と item に統一）
-rowCount.querySelector('.btnStore').addEventListener('click', async ()=>{
-  try{
-   const { db, ref, runTransaction, push } = window.firebaseDB;
-   // ① 集計ノードへ原子的に +1
-   const node = ref(db, `warehouse/${TEAM}/byItem/${name}`);
-   await runTransaction(node, cur => (cur || 0) + 1);
+// 旧:
+// rowCount.querySelector('.btnStore').addEventListener('click', async ()=>{ ... });
 
-    // インベントリから削除
+const btnStore = rowCount.querySelector('.btnStore');
+btnStore.addEventListener('click', async (e)=>{
+  const btn = e.currentTarget;
+
+  // --- 二重起動ガード（見た目変更なし）---
+  if (btn.dataset.busy === '1') return;
+  btn.dataset.busy = '1';
+
+  try{
+    // 一時停止中なら何もしない
+    try { assertNotPaused(); } catch(_) { return; }
+
+    if (!window.firebaseDB){
+      showToast('倉庫連携（Firebase）が未設定です');
+      return;
+    }
+
+    const { db, ref, runTransaction } = window.firebaseDB;
+
+    // ① 倉庫の集計ノードを原子的に +1
+    const node = ref(db, `warehouse/${TEAM}/byItem/${name}`);
+    await runTransaction(node, cur => (cur || 0) + 1);
+
+    // ② ローカル在庫から1つ減らす → 再描画（ここでボタンDOMは作り直され busy もリセット）
     if (inventory.bySpecies[name]) {
-      inventory.total--;
-      inventory.bySpecies[name]--;
+      inventory.total = Math.max(0, inventory.total - 1);
+      inventory.bySpecies[name] = Math.max(0, (inventory.bySpecies[name] || 0) - 1);
       if (inventory.bySpecies[name] <= 0) delete inventory.bySpecies[name];
       saveInv();
       renderInventory();
       showToast(`${name} を倉庫にしまいました`);
     }
-  }catch(e){
-    showToast('倉庫にしまうには Firebase の設定が必要です');
+  }catch(err){
+    showToast('送信に失敗しました');
+  }finally{
+    // 再描画されなかった場合の保険
+    btn.dataset.busy = '';
   }
 });
 
 
+
     // 捨てる
-    rowCount.querySelector('.btnDrop').addEventListener('click', ()=>{
-      if(inventory.bySpecies[name]){
-        inventory.total--;
-        inventory.bySpecies[name]--;
-        if(inventory.bySpecies[name] <= 0) delete inventory.bySpecies[name];
-        saveInv();
-        renderInventory();
-        showToast(`${name} を捨てました`);
-      }
-    });
+// 旧:
+// rowCount.querySelector('.btnDrop').addEventListener('click', ()=>{
+
+rowCount.querySelector('.btnDrop').addEventListener('click', ()=>{
+  try { assertNotPaused(); } catch(_) { return; }
+
+  if (inventory.bySpecies[name]){
+    inventory.total = Math.max(0, inventory.total - 1);
+    inventory.bySpecies[name] = Math.max(0, (inventory.bySpecies[name] || 0) - 1);
+    if (inventory.bySpecies[name] <= 0) delete inventory.bySpecies[name];
+    saveInv();
+    renderInventory();
+    showToast(`${name} を捨てました`);
+  }
+});
+
 
     list.appendChild(rowName);
     list.appendChild(rowCount);
@@ -776,6 +805,7 @@ const firebaseConfig = {
 
 </body>
 </html>
+
 
 
 
