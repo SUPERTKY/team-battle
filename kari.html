@@ -375,7 +375,19 @@ const divider  = document.getElementById("divider");
     const enemyNameLbl = document.getElementById("enemyNameLbl");
 // ===== インベントリ =====
 // ===== インベントリ（TURI見た目） =====
-const INV_KEY = 'inventory_hunt_v1'; // 狩り専用に分離
+// === Inventory v2: 24h expire / FIFO ===
+const INV_KEY = 'inventory_hunt_v1';  // 既存キーを継続利用（中身のみ進化）
+const EXPIRE_MS = 24 * 60 * 60 * 1000; // 24時間
+const nowMs = () => Date.now();
+
+// ※ 初回パージはデフォルトOFF（必要なら true に）
+const ENABLE_FIRST_PURGE = false;
+const PURGE_FLAG_KEY = 'inventory_hunt_purge_2025_11_04';
+if (ENABLE_FIRST_PURGE && !localStorage.getItem(PURGE_FLAG_KEY)) {
+  try { localStorage.removeItem(INV_KEY); } catch {}
+  localStorage.setItem(PURGE_FLAG_KEY, '1');
+}
+
 // 保持形式：{ total:number, byItem:{ [name]: qty } }
 let inv = loadInv();
 
@@ -422,6 +434,35 @@ function pushGetReport(text){
     setTimeout(()=> card.remove(), 260);
   }, LOOT_LIFETIME);
 }
+    function pruneExpiredInv(){
+  if (!inv || inv.version !== 2) return;
+  const now = nowMs();
+  inv.stamps = inv.stamps || {};
+
+  for (const name of Object.keys(inv.byItem)){
+    const qty = inv.byItem[name] | 0;
+    let arr = Array.isArray(inv.stamps[name]) ? inv.stamps[name] : [];
+    // stampsと数量の整合
+    if (arr.length < qty) arr = arr.concat(Array(qty - arr.length).fill(now));
+    if (arr.length > qty) arr = arr.slice(0, qty);
+
+    // 24h超は削除
+    const keep = arr.filter(t => (now - t) < EXPIRE_MS);
+    const removed = arr.length - keep.length;
+    if (removed > 0) inv.byItem[name] = Math.max(0, qty - removed);
+
+    if ((inv.byItem[name] | 0) <= 0){
+      delete inv.byItem[name];
+      delete inv.stamps[name];
+    }else{
+      inv.stamps[name] = keep;
+    }
+  }
+
+  inv.total = Object.values(inv.byItem).reduce((a,b)=>a+(b||0),0);
+  saveInv();
+}
+
 // 敵の押しを rAF で回す（新規追加）
 function startEnemyLoop(enemyBasePerSec, burstPow){
   cancelAnimationFrame(rafId);
@@ -465,31 +506,66 @@ function startEnemyLoop(enemyBasePerSec, burstPow){
 function loadInv(){
   try{
     const raw = localStorage.getItem(INV_KEY);
-    const obj = raw ? JSON.parse(raw) : {};
-    // 旧形式（{名前:個数}）→ 新形式に自動変換
-    if (!('total' in obj) || !('byItem' in obj)){
-      const byItem = obj && typeof obj === 'object' ? obj : {};
-      const total = Object.values(byItem).reduce((a,b)=> a+(b||0), 0);
-      const neo = { total, byItem };
-      localStorage.setItem(INV_KEY, JSON.stringify(neo));
-      return neo;
+    const obj = raw ? JSON.parse(raw) : null;
+    // v2 スキーマならそのまま
+    if (obj && obj.version === 2 && obj.byItem && obj.stamps) return obj;
+
+    // 旧スキーマ { total, byItem } を自動マイグレーション
+    const old = obj && typeof obj === 'object' ? obj : { total:0, byItem:{} };
+    const neo = { version:2, total:0, byItem:{}, stamps:{} };
+    for (const [name, qty] of Object.entries(old.byItem || {})){
+      if (!qty) continue;
+      neo.byItem[name] = qty;
+      neo.stamps[name] = Array(qty).fill(nowMs()); // 全て“今”入手した扱い
+      neo.total += qty;
     }
-    return obj;
+    localStorage.setItem(INV_KEY, JSON.stringify(neo));
+    return neo;
   }catch(_){
-    return { total:0, byItem:{} };
+    return { version:2, total:0, byItem:{}, stamps:{} };
   }
 }
+function saveInv(){
+  try{ localStorage.setItem(INV_KEY, JSON.stringify(inv)); }catch{}
+}
+
 function saveInv(){ try{ localStorage.setItem(INV_KEY, JSON.stringify(inv)); }catch(_){} }
 
 // 既存の dropLoot から呼ばれる想定
 function addToInventory(name, qty=1){
-  inv.total += qty;
-  inv.byItem[name] = (inv.byItem[name]||0) + qty;
+  if (qty <= 0) return;
+  inv.version = 2;
+  inv.byItem[name] = (inv.byItem[name] || 0) + qty;
+
+  inv.stamps = inv.stamps || {};
+  const arr = inv.stamps[name] = inv.stamps[name] || [];
+  const t = nowMs();
+  for (let i=0;i<qty;i++) arr.push(t);
+
+  inv.total = Object.values(inv.byItem).reduce((a,b)=>a+(b||0),0);
+
+  pruneExpiredInv();
+  renderInventory();
+  pushGetReport?.(`+${qty} ${name}`);
+}
+function consumeFromInventory(name, qty=1){
+  if (qty <= 0) return false;
+  if (!inv.byItem[name] || inv.byItem[name] < qty) return false;
+
+  inv.byItem[name] -= qty;
+
+  // FIFOでスタンプ削除
+  inv.stamps = inv.stamps || {};
+  const arr = inv.stamps[name] = inv.stamps[name] || [];
+  arr.splice(0, Math.min(qty, arr.length));
+  if (arr.length) inv.stamps[name] = arr; else delete inv.stamps[name];
+
+  if (inv.byItem[name] <= 0) delete inv.byItem[name];
+
+  inv.total = Object.values(inv.byItem).reduce((a,b)=>a+(b||0),0);
   saveInv();
   renderInventory();
-pushGetReport(`+${qty} ${name}`);
-
-
+  return true;
 }
 
 function renderInventory(){
@@ -515,54 +591,37 @@ function renderInventory(){
  `;
 
     // 倉庫（Firebase があれば保存）
+// 倉庫
 const btnStore = actionCell.querySelector('.btnStore');
-
 btnStore.addEventListener('click', async (e)=>{
   const btn = e.currentTarget;
-
-  // --- 二重起動ガード ---
   if (btn.dataset.busy === '1') return;
-  btn.dataset.busy = '1';  // 起動中フラグ
-
+  btn.dataset.busy = '1';
   try{
     const api = window.firebaseDB;
     if(!api) throw new Error('no-firebase');
-
+    try{ assertNotPaused(); }catch(_){ btn.dataset.busy=''; return; }
     const { db, ref, runTransaction } = api;
-
-    try{ assertNotPaused(); }catch(_){ 
-      btn.dataset.busy = ''; 
-      return; 
-    }
-
     const node = ref(db, `warehouse/${TEAM}/byItem/${name}`);
     await runTransaction(node, cur => (cur || 0) + 1);
 
-    if (inv.byItem[name]){
-      inv.total--;
-      if (--inv.byItem[name] <= 0) delete inv.byItem[name];
-      saveInv();
-      renderInventory();
+    if (consumeFromInventory(name, 1)){
       showToast?.(`${name} を倉庫にしまいました`);
     }
-  }catch(e){
+  }catch(_){
     showToast?.('倉庫にしまうには Firebase の設定が必要です');
   }finally{
-    // フラグ解除（エラーでも次に備えて）
     btn.dataset.busy = '';
   }
 });
 
+// 捨てる
+actionCell.querySelector('.btnDrop').addEventListener('click', ()=>{
+  if (consumeFromInventory(name, 1)){
+    showToast?.(`${name} を捨てました`);
+  }
+});
 
-    // 捨てる
-    actionCell.querySelector('.btnDrop').addEventListener('click', ()=>{
-      if (inv.byItem[name]){
-        inv.total--;
-        if (--inv.byItem[name] <= 0) delete inv.byItem[name];
-        saveInv(); renderInventory();
-        showToast?.(`${name} を捨てました`);
-      }
-    });
 
     invList.appendChild(nameCell);
     invList.appendChild(actionCell);
@@ -575,7 +634,10 @@ invBtn?.addEventListener('click', ()=>{
 });
 
 // 初期描画
+// 初期描画
 renderInventory();
+pruneExpiredInv(); // 起動直後に掃除
+setInterval(()=>{ pruneExpiredInv(); renderInventory(); }, 60 * 1000); // 毎分
 
 
     // ===== 共通ユーティリティ =====
@@ -894,6 +956,7 @@ function fleeActor(img){
 
 </body>
 </html>
+
 
 
 
