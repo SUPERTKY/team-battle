@@ -445,31 +445,119 @@ function spawnAt(clientX, clientY) {
       }
     });
     /* ==== Inventory（このページ用の簡易版） ==== */
-const INV_KEY = 'farm_inventory_v1';
+/* ==== Inventory（24h失効＋旧データ削除のみ・最小パッチ） ==== */
+
+// ★新キー（v2）に移行
+const INV_KEY = 'farm_inventory_v2';
 const INV_LIMIT = 20;
+
+// 24h 失効
+const EXPIRE_MS = 24 * 60 * 60 * 1000;
+const nowMs = () => Date.now();
+
+// ★旧データの一度きりパージ
+const PURGE_FLAG_KEY = 'farm_inventory_purge_2025_11_04';
+if (!localStorage.getItem(PURGE_FLAG_KEY)) {
+  try { localStorage.removeItem('farm_inventory_v1'); } catch(_) {}
+  localStorage.setItem(PURGE_FLAG_KEY, '1');
+}
+
 let inventory = loadInv();
 
 function loadInv(){
   try{
-    const j = localStorage.getItem(INV_KEY);
-    return j ? JSON.parse(j) : { total:0, byName:{} };
-  }catch(_){ return { total:0, byName:{} }; }
+    const raw = localStorage.getItem(INV_KEY);
+    const obj = raw ? JSON.parse(raw) : null;
+    // v2 スキーマ：{ version:2, total:number, byName:{}, stamps:{ name:[ts,ts,...] } }
+    if (obj && obj.version === 2 && obj.byName && obj.stamps) return obj;
+  }catch(_){}
+  const neo = { version:2, total:0, byName:{}, stamps:{} };
+  localStorage.setItem(INV_KEY, JSON.stringify(neo));
+  return neo;
 }
-function saveInv(){ localStorage.setItem(INV_KEY, JSON.stringify(inventory)); }
 
-function addHarvestToInv({ name, seedKey }){
-  if (inventory.total >= INV_LIMIT){
-    showToast("インベントリがいっぱいです");
-    return false;
+function saveInv(){
+  try{ localStorage.setItem(INV_KEY, JSON.stringify(inventory)); }catch(_){}
+}
+
+/* 24h 失効（FIFO整合込み） */
+function pruneExpiredInv(){
+  if (!inventory || inventory.version !== 2) return;
+  const now = nowMs();
+  inventory.stamps = inventory.stamps || {};
+  let deltaTotal = 0;
+
+  for (const name of Object.keys(inventory.byName)){
+    const qty = inventory.byName[name] | 0;
+    let arr = Array.isArray(inventory.stamps[name]) ? inventory.stamps[name] : [];
+
+    // stamps ↔ 数量の整合
+    if (arr.length < qty) arr = arr.concat(Array(qty - arr.length).fill(now));
+    if (arr.length > qty) arr = arr.slice(0, qty);
+
+    // 期限内だけ残す
+    const keep = arr.filter(t => (now - t) < EXPIRE_MS);
+    const removed = arr.length - keep.length;
+
+    if (removed > 0){
+      inventory.byName[name] = Math.max(0, qty - removed);
+      deltaTotal -= removed;
+    }
+
+    if (inventory.byName[name] <= 0){
+      delete inventory.byName[name];
+      delete inventory.stamps[name];
+    }else{
+      inventory.stamps[name] = keep;
+    }
   }
-  inventory.total++;
-  inventory.byName[name] = (inventory.byName[name]||0) + 1;
+
+  inventory.total = Math.max(0, (inventory.total|0) + deltaTotal);
+  saveInv();
+}
+
+/* 任意アイテムを qty 個追加（上限・時刻付与） */
+function addItemToInv(name, qty=1){
+  for (let i=0; i<qty; i++){
+    if (inventory.total >= INV_LIMIT){
+      showToast("インベントリがいっぱいです");
+      return false;
+    }
+    inventory.total++;
+    inventory.byName[name] = (inventory.byName[name] || 0) + 1;
+
+    (inventory.stamps[name] = inventory.stamps[name] || []).push(nowMs());
+  }
   saveInv();
   renderInventory();
-  showToast(`+1 ${name} を収穫！`);
   return true;
 }
 
+/* 1個だけ捨てる（FIFOで最古から） */
+function removeOneFromInv(name){
+  if (!inventory.byName[name]) return false;
+  inventory.byName[name]--;
+  inventory.total = Math.max(0, inventory.total - 1);
+
+  const arr = inventory.stamps[name] || [];
+  if (arr.length) arr.splice(0,1); // FIFO
+  if (!inventory.byName[name]){
+    delete inventory.byName[name];
+    delete inventory.stamps[name];
+  }
+  saveInv();
+  renderInventory();
+  return true;
+}
+
+/* 収穫1個（トースト付き） */
+function addHarvestToInv({ name }){
+  const ok = addItemToInv(name, 1);
+  if (ok) showToast(`+1 ${name} を収穫！`);
+  return ok;
+}
+
+/* 表示は従来どおり（UIはいじらない） */
 function renderInventory(){
   const meta = document.getElementById('invMeta');
   const list = document.getElementById('invList');
@@ -493,52 +581,46 @@ function renderInventory(){
       <button class="btnDrop">捨てる</button>
     `;
 
-const btnStore = rowCtrl.querySelector('.btnStore');
-btnStore.addEventListener('click', async (e)=>{
-  const btn = e.currentTarget;
+    // 倉庫：+1 できたらローカルも FIFOで −1
+    const btnStore = rowCtrl.querySelector('.btnStore');
+    btnStore.addEventListener('click', async (e)=>{
+      const btn = e.currentTarget;
+      if (btn.dataset.busy === '1') return;
+      btn.dataset.busy = '1';
+      try {
+        try { assertNotPaused(); } catch(_) { btn.dataset.busy = ''; return; }
 
-  // --- 二重起動ガード（見た目変更なし）---
-  if (btn.dataset.busy === '1') return;
-  btn.dataset.busy = '1';
+        if (window.firebaseDB){
+          const { db, ref, runTransaction } = window.firebaseDB;
+          await runTransaction(ref(db, `warehouse/${TEAM}/byItem/${name}`), cur => (cur || 0) + 1);
+          if (removeOneFromInv(name)){
+            showToast(`${name} を倉庫にしまいました`);
+          }
+        } else {
+          showToast("倉庫連携（Firebase）が未設定です");
+        }
+      } catch (e2) {
+        showToast("送信に失敗しました");
+      } finally {
+        btn.dataset.busy = '';
+      }
+    });
 
-  try {
-    try { assertNotPaused(); } catch(_) { btn.dataset.busy = ''; return; }
-
-    if (window.firebaseDB){
-      const { db, ref, runTransaction } = window.firebaseDB;
-
-      // ① 倉庫側カウントを原子的に +1
-      await runTransaction(ref(db, `warehouse/${TEAM}/byItem/${name}`), cur => (cur || 0) + 1);
-
-      // ② ローカル在庫を1つ減らす → 再描画（ボタンは作り直され busy も自然リセット）
-      inventory.total = Math.max(0, inventory.total - 1);
-      inventory.byName[name] = Math.max(0, (inventory.byName[name]||0) - 1);
-      if (inventory.byName[name] <= 0) delete inventory.byName[name];
-      saveInv(); renderInventory();
-      showToast(`${name} を倉庫にしまいました`);
-    } else {
-      showToast("倉庫連携（Firebase）が未設定です");
-    }
-  } catch (e2) {
-    showToast("送信に失敗しました");
-  } finally {
-    // 再描画されなかった場合の保険として解除
-    btn.dataset.busy = '';
-  }
-});
-
-    // 捨てる
+    // 捨てる：1個だけ（※Altで全部などは実装しない）
     rowCtrl.querySelector('.btnDrop').addEventListener('click', ()=>{
-       try { assertNotPaused(); } catch(_) { return; }
-      inventory.total = Math.max(0, inventory.total - 1);
-      inventory.byName[name] = Math.max(0, (inventory.byName[name]||0) - 1);
-      if (inventory.byName[name] <= 0) delete inventory.byName[name];
-      saveInv(); renderInventory();
-      showToast(`${name} を捨てました`);
+      try { assertNotPaused(); } catch(_) { return; }
+      if (removeOneFromInv(name)) showToast(`${name} を捨てました`);
     });
 
     list.appendChild(rowName);
     list.appendChild(rowCtrl);
+  }
+
+  if (entries.length === 0){
+    const empty = document.createElement('div');
+    empty.className = 'meta';
+    empty.textContent = '（何も持っていません）';
+    list.appendChild(empty);
   }
 }
 
@@ -549,10 +631,18 @@ function toggleInventory(){
 
 // 初期化（ページロード時）
 addEventListener('load', () => {
+  pruneExpiredInv();                         // ★起動時にまず24h掃除
   renderInventory();
+
+  setInterval(()=>{                          // ★毎分掃除
+    pruneExpiredInv();
+    renderInventory();
+  }, 60 * 1000);
+
   const btn = document.getElementById('invBtn');
   btn && btn.addEventListener('click', toggleInventory);
 });
+
 
 /* ==== 収穫処理 ==== */
 function harvestPlant(imgEl){
@@ -686,6 +776,7 @@ function addHarvestToInv({ name }){
 
 </body>
 </html>
+
 
 
 
