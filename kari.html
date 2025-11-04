@@ -375,8 +375,9 @@ const divider  = document.getElementById("divider");
     const enemyNameLbl = document.getElementById("enemyNameLbl");
 // ===== インベントリ =====
 // ===== インベントリ（TURI見た目） =====
-const INV_KEY = 'inventory_v1';
-// 保持形式：{ total:number, byItem:{ [name]: qty } }
+const INV_KEY = 'farm_inventory_v1';
+ const INV_LIMIT = 20; // 任意
+ // 形式：{ total:number, byName:{ [name]: qty } }
 let inv = loadInv();
 
 const invPanel = document.getElementById('invPanel');
@@ -463,34 +464,24 @@ function startEnemyLoop(enemyBasePerSec, burstPow){
 }
 
 function loadInv(){
-  try{
-    const raw = localStorage.getItem(INV_KEY);
-    const obj = raw ? JSON.parse(raw) : {};
-    // 旧形式（{名前:個数}）→ 新形式に自動変換
-    if (!('total' in obj) || !('byItem' in obj)){
-      const byItem = obj && typeof obj === 'object' ? obj : {};
-      const total = Object.values(byItem).reduce((a,b)=> a+(b||0), 0);
-      const neo = { total, byItem };
-      localStorage.setItem(INV_KEY, JSON.stringify(neo));
-      return neo;
-    }
-    return obj;
-  }catch(_){
-    return { total:0, byItem:{} };
-  }
-}
+   try{
+     const j = localStorage.getItem(INV_KEY);
+     return j ? JSON.parse(j) : { total:0, byName:{} };
+   }catch(_){ return { total:0, byName:{} }; }
+ }
+ function saveInv(){ localStorage.setItem(INV_KEY, JSON.stringify(inv)); }
 function saveInv(){ try{ localStorage.setItem(INV_KEY, JSON.stringify(inv)); }catch(_){} }
 
 // 既存の dropLoot から呼ばれる想定
-function addToInventory(name, qty=1){
-  inv.total += qty;
-  inv.byItem[name] = (inv.byItem[name]||0) + qty;
-  saveInv();
-  renderInventory();
-pushGetReport(`+${qty} ${name}`);
-
-
-}
+function addItemToInv(name, qty=1){
+   for(let i=0;i<qty;i++){
+     if(inv.total >= INV_LIMIT){ showToast('インベントリがいっぱいです'); return false; }
+     inv.total++;
+   }
+   inv.byName[name] = (inv.byName[name]||0) + qty;
+   saveInv(); renderInventory();
+   return true;
+ }
 
 function renderInventory(){
   if(!invMeta || !invList) return;
@@ -514,44 +505,30 @@ function renderInventory(){
    <button class="btnDrop inv-action">捨てる</button>
  `;
 
-    // 倉庫（Firebase があれば保存）
-const btnStore = actionCell.querySelector('.btnStore');
-
-btnStore.addEventListener('click', async (e)=>{
-  const btn = e.currentTarget;
-
-  // --- 二重起動ガード ---
-  if (btn.dataset.busy === '1') return;
-  btn.dataset.busy = '1';  // 起動中フラグ
-
-  try{
-    const api = window.firebaseDB;
-    if(!api) throw new Error('no-firebase');
-
-    const { db, ref, runTransaction } = api;
-
-    try{ assertNotPaused(); }catch(_){ 
-      btn.dataset.busy = ''; 
-      return; 
-    }
-
-    const node = ref(db, `warehouse/${TEAM}/byItem/${name}`);
-    await runTransaction(node, cur => (cur || 0) + 1);
-
-    if (inv.byItem[name]){
-      inv.total--;
-      if (--inv.byItem[name] <= 0) delete inv.byItem[name];
-      saveInv();
-      renderInventory();
-      showToast?.(`${name} を倉庫にしまいました`);
-    }
-  }catch(e){
-    showToast?.('倉庫にしまうには Firebase の設定が必要です');
-  }finally{
-    // フラグ解除（エラーでも次に備えて）
-    btn.dataset.busy = '';
-  }
-});
+const btnStore = rowCtrl.querySelector('.btnStore');
+ btnStore.addEventListener('click', async (e)=>{
+   const btn = e.currentTarget;
+   if (btn.dataset.busy === '1') return;
+   btn.dataset.busy = '1';
+   try{
+     try{ assertNotPaused(); }catch(_){ btn.dataset.busy=''; return; }
+     if (window.firebaseDB){
+      const { db, ref, runTransaction } = window.firebaseDB;
+      await runTransaction(ref(db, `warehouse/${TEAM}/byItem/${name}`), cur => (cur || 0) + 1);
+      inv.total = Math.max(0, inv.total - 1);
+       inv.byName[name] = Math.max(0, (inv.byName[name]||0) - 1);
+       if (inv.byName[name] <= 0) delete inv.byName[name];
+       saveInv(); renderInventory();
+       showToast(`${name} を倉庫にしまいました`);
+     }else{
+       showToast('倉庫連携（Firebase）が未設定です');
+     }
+   }catch(_){
+     showToast('送信に失敗しました');
+   }finally{
+     btn.dataset.busy = '';
+   }
+ });
 
 
     // 捨てる
@@ -570,9 +547,8 @@ btnStore.addEventListener('click', async (e)=>{
 }
 
 // 開閉
-invBtn?.addEventListener('click', ()=>{
-  invPanel.classList.toggle('hidden');
-});
+function toggleInventory(){ invPanel.classList.toggle('hidden'); }
++ invBtn?.addEventListener('click', toggleInventory);
 
 // 初期描画
 renderInventory();
@@ -749,7 +725,11 @@ function dropLoot(mon, atX, atY){
   for (let i=0;i<count;i++){
     const item = pick(mon.drops);
     // ここで在庫追加 → addToInventory 内で "+1 アイテム名" を1回だけ報告
-    addToInventory(item, 1);
+    addItemToInv(item, 1);
+ showToast(`+1 ${item}`);
+
+ pushGetReport?.(`+1 ${item}`);
+
   }
 }
 
@@ -894,6 +874,7 @@ function fleeActor(img){
 
 </body>
 </html>
+
 
 
 
