@@ -375,7 +375,7 @@ const divider  = document.getElementById("divider");
     const enemyNameLbl = document.getElementById("enemyNameLbl");
 // ===== インベントリ =====
 // ===== インベントリ（TURI見た目） =====
-const INV_KEY = 'inventory_v1';
+const INV_KEY = 'inventory_hunt_v1'; // 狩り専用に分離
 // 保持形式：{ total:number, byItem:{ [name]: qty } }
 let inv = loadInv();
 
@@ -894,6 +894,7 @@ function fleeActor(img){
 
 </body>
 </html>
+
 
 
 
