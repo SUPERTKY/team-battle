@@ -535,38 +535,108 @@ addEventListener('load', () => {
 
 addEventListener('load',init);
   // === Inventory ===
-const INV_KEY = 'turi_inventory_v1';
-const RANKS = CATCH.ranks; // ["COMMON","UNCOMMON",...]
+// === Inventory (v2, 24h失効 + FIFO) ===
+const INV_KEY = 'turi_inventory_v2';
+const INV_LIMIT = 10;
+const EXPIRE_MS = 24 * 60 * 60 * 1000; // 24h
+
+// 一度きりの旧データ削除
+const PURGE_FLAG_KEY = 'turi_inventory_purge_2025_11_04';
+if (!localStorage.getItem(PURGE_FLAG_KEY)) {
+  try { localStorage.removeItem('turi_inventory_v1'); } catch(_) {}
+  localStorage.setItem(PURGE_FLAG_KEY, '1');
+}
+
 let inventory = loadInv();
+
+function nowMs(){ return Date.now(); }
 
 function loadInv(){
   try{
-    const j = localStorage.getItem(INV_KEY);
-    return j ? JSON.parse(j) : { total:0, bySpecies:{} };
-  }catch(_){ return { total:0, bySpecies:{} }; }
+    const raw = localStorage.getItem(INV_KEY);
+    const obj = raw ? JSON.parse(raw) : null;
+    // v2: {version:2, total:number, bySpecies:{}, stamps:{species:[ts,...]}}
+    if (obj && obj.version === 2 && obj.bySpecies && obj.stamps) return obj;
+  }catch(_){}
+  const neo = { version:2, total:0, bySpecies:{}, stamps:{} };
+  localStorage.setItem(INV_KEY, JSON.stringify(neo));
+  return neo;
 }
+function saveInv(){ try{ localStorage.setItem(INV_KEY, JSON.stringify(inventory)); }catch(_){} }
 
-function saveInv(){ localStorage.setItem(INV_KEY, JSON.stringify(inventory)); }
+/** 期限切れの魚を掃除（FIFO整合） */
+function pruneExpiredInv(){
+  if (!inventory || inventory.version !== 2) return;
+  const now = nowMs();
+  let deltaTotal = 0;
 
-function addCatchToInv({rank, species, sizePx}){
-  if (inventory.total >= INV_LIMIT){
-    showToast("インベントリがいっぱいです");
-    return; // 追加しない
+  for (const sp of Object.keys(inventory.bySpecies)){
+    const qty = inventory.bySpecies[sp] | 0;
+    let arr = Array.isArray(inventory.stamps[sp]) ? inventory.stamps[sp] : [];
+
+    // stamps ↔ 数量の整合
+    if (arr.length < qty) arr = arr.concat(Array(qty - arr.length).fill(now));
+    if (arr.length > qty) arr = arr.slice(0, qty);
+
+    // 24h内のものだけ残す
+    const keep = arr.filter(t => (now - t) < EXPIRE_MS);
+    const removed = arr.length - keep.length;
+
+    if (removed > 0){
+      inventory.bySpecies[sp] = Math.max(0, qty - removed);
+      deltaTotal -= removed;
+    }
+
+    if (inventory.bySpecies[sp] <= 0){
+      delete inventory.bySpecies[sp];
+      delete inventory.stamps[sp];
+    }else{
+      inventory.stamps[sp] = keep;
+    }
   }
 
-  inventory.total++;
-  inventory.bySpecies[species] = (inventory.bySpecies[species]||0)+1;
+  inventory.total = Math.max(0, (inventory.total|0) + deltaTotal);
   saveInv();
-  renderInventory();
-  
-    pushGetReport(species); // ★ゲット報告に追加（画像を積む）
-
 }
 
+/** 任意の魚を qty匹 追加（上限・時刻付与） */
+function addItemToInv(species, qty=1){
+  for(let i=0;i<qty;i++){
+    if (inventory.total >= INV_LIMIT){
+      showToast("インベントリがいっぱいです");
+      return false;
+    }
+    inventory.total++;
+    inventory.bySpecies[species] = (inventory.bySpecies[species]||0) + 1;
+    (inventory.stamps[species] = inventory.stamps[species] || []).push(nowMs());
+  }
+  saveInv(); renderInventory();
+  return true;
+}
 
+/** 1匹だけ減らす（FIFOで最古から） */
+function removeOneFromInv(species){
+  if (!inventory.bySpecies[species]) return false;
+  inventory.bySpecies[species]--;
+  inventory.total = Math.max(0, inventory.total - 1);
 
+  const arr = inventory.stamps[species] || [];
+  if (arr.length) arr.splice(0,1); // 最古を除去
+  if (!inventory.bySpecies[species]){
+    delete inventory.bySpecies[species];
+    delete inventory.stamps[species];
+  }
+  saveInv(); renderInventory();
+  return true;
+}
 
+/** 釣り上げ時に呼ぶ（ゲット報告＋1匹追加） */
+function addCatchToInv({rank, species, sizePx}){
+  if (!addItemToInv(species, 1)) return;
+  pushGetReport(species); // ゲット演出
+}
 
+/** UI描画（倉庫/捨てるは FIFO で1匹） */
 function renderInventory(){
   const meta = document.getElementById('invMeta');
   const list = document.getElementById('invList');
@@ -591,78 +661,42 @@ function renderInventory(){
       <button class="btnDrop">捨てる</button>
     `;
 
-    // 倉庫にしまう
-// 倉庫にしまう（TEAM と item に統一）
-// 旧:
-// rowCount.querySelector('.btnStore').addEventListener('click', async ()=>{ ... });
+    // 倉庫：+1 成功したらローカルも FIFOで -1
+    const btnStore = rowCount.querySelector('.btnStore');
+    btnStore.addEventListener('click', async (e)=>{
+      const btn = e.currentTarget;
+      if (btn.dataset.busy === '1') return;
+      btn.dataset.busy = '1';
+      try{
+        try { assertNotPaused(); } catch(_) { btn.dataset.busy = ''; return; }
+        if (!window.firebaseDB){ showToast('倉庫連携（Firebase）が未設定です'); return; }
+        const { db, ref, runTransaction } = window.firebaseDB;
+        await runTransaction(ref(db, `warehouse/${TEAM}/byItem/${name}`), cur => (cur || 0) + 1);
+        if (removeOneFromInv(name)) showToast(`${name} を倉庫にしまいました`);
+      }catch(_){
+        showToast('送信に失敗しました');
+      }finally{
+        btn.dataset.busy = '';
+      }
+    });
 
-const btnStore = rowCount.querySelector('.btnStore');
-btnStore.addEventListener('click', async (e)=>{
-  const btn = e.currentTarget;
-
-  // --- 二重起動ガード（見た目変更なし）---
-  if (btn.dataset.busy === '1') return;
-  btn.dataset.busy = '1';
-
-  try{
-    // 一時停止中なら何もしない
-    try { assertNotPaused(); } catch(_) { return; }
-
-    if (!window.firebaseDB){
-      showToast('倉庫連携（Firebase）が未設定です');
-      return;
-    }
-
-    const { db, ref, runTransaction } = window.firebaseDB;
-
-    // ① 倉庫の集計ノードを原子的に +1
-    const node = ref(db, `warehouse/${TEAM}/byItem/${name}`);
-    await runTransaction(node, cur => (cur || 0) + 1);
-
-    // ② ローカル在庫から1つ減らす → 再描画（ここでボタンDOMは作り直され busy もリセット）
-    if (inventory.bySpecies[name]) {
-      inventory.total = Math.max(0, inventory.total - 1);
-      inventory.bySpecies[name] = Math.max(0, (inventory.bySpecies[name] || 0) - 1);
-      if (inventory.bySpecies[name] <= 0) delete inventory.bySpecies[name];
-      saveInv();
-      renderInventory();
-      showToast(`${name} を倉庫にしまいました`);
-    }
-  }catch(err){
-    showToast('送信に失敗しました');
-  }finally{
-    // 再描画されなかった場合の保険
-    btn.dataset.busy = '';
-  }
-});
-
-
-
-    // 捨てる
-// 旧:
-// rowCount.querySelector('.btnDrop').addEventListener('click', ()=>{
-
-rowCount.querySelector('.btnDrop').addEventListener('click', ()=>{
-  try { assertNotPaused(); } catch(_) { return; }
-
-  if (inventory.bySpecies[name]){
-    inventory.total = Math.max(0, inventory.total - 1);
-    inventory.bySpecies[name] = Math.max(0, (inventory.bySpecies[name] || 0) - 1);
-    if (inventory.bySpecies[name] <= 0) delete inventory.bySpecies[name];
-    saveInv();
-    renderInventory();
-    showToast(`${name} を捨てました`);
-  }
-});
-
+    // 捨てる：FIFOで1匹
+    rowCount.querySelector('.btnDrop').addEventListener('click', ()=>{
+      try { assertNotPaused(); } catch(_) { return; }
+      if (removeOneFromInv(name)) showToast(`${name} を捨てました`);
+    });
 
     list.appendChild(rowName);
     list.appendChild(rowCount);
   }
+
+  if (entries.length === 0){
+    const empty = document.createElement('div');
+    empty.className = 'meta';
+    empty.textContent = '（何も持っていません）';
+    list.appendChild(empty);
+  }
 }
-
-
-
 
 function toggleInventory(){
   const p = document.getElementById('invPanel');
@@ -676,6 +710,7 @@ function showToast(html){
   clearTimeout(showToast._timer);
   showToast._timer = setTimeout(()=> t.classList.remove('show'), 1600);
 }
+
 // === ゲット報告（Get Feed） ===
 const GET_MAX = 3;              // 同時表示の上限
 const GET_LIFETIME = 4500;      // 自動消滅までの時間(ms)
@@ -805,6 +840,7 @@ const firebaseConfig = {
 
 </body>
 </html>
+
 
 
 
