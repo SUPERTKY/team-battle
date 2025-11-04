@@ -328,6 +328,22 @@ button.chev{
   "ダイオウイカの唐揚げ": { "materials": ["ダイオウイカ","フレイムグリース","ファイアペッパー"] },
   "ダイオウイカとスターライスの炊き込みご飯": { "materials": ["ダイオウイカ","スターライス","サンリーフ"] }
     };
+// ===== 24時間有効期限の設定 =====
+const EXPIRE_MS = 24 * 60 * 60 * 1000; // 24時間
+const nowMs = () => Date.now();
+// ===== 旧インベントリ強制パージ（1回だけ） =====
+const INV_KEY = 'inventory_v1';                // 旧キー
+const PURGE_FLAG_KEY = 'inventory_purge_2025_11_04'; // 適当な一意フラグ（日付入りにしておく）
+
+if (!localStorage.getItem(PURGE_FLAG_KEY)) {
+  try {
+    localStorage.removeItem(INV_KEY);          // 旧在庫を完全削除
+    // （もし他に使ってた旧キーがあればここで一緒に消す）
+    // localStorage.removeItem('inventory');    // 例：さらに古いキーがあれば
+
+  } catch (_) {}
+  localStorage.setItem(PURGE_FLAG_KEY, '1');   // 二度と走らないようにフラグ
+}
 
     /* =====================  Firebase  ===================== */
     const firebaseConfig = {
@@ -430,19 +446,22 @@ function getTeamFromURL(){
  teamLabel.textContent = TEAM.replace('team','チーム');
 
     /* =====================  ローカル在庫（手持ち）  ===================== */
-    const INV_KEY = 'inventory_v1'; // 既存仕様と互換
-    function loadInv(){
-      try{
-        const raw = localStorage.getItem(INV_KEY);
-        const obj = raw ? JSON.parse(raw) : {};
-        if (!('total' in obj) || !('byItem' in obj)){
-          const byItem = obj && typeof obj === 'object' ? obj : {};
-          const total = Object.values(byItem).reduce((a,b)=> a+(b||0), 0);
-          const neo = { total, byItem }; localStorage.setItem(INV_KEY, JSON.stringify(neo)); return neo;
-        }
-        return obj;
-      }catch{ return { total:0, byItem:{} } }
-    }
+// 24h 失効の定数（まだ無ければ）
+const EXPIRE_MS = 24 * 60 * 60 * 1000;
+const nowMs = () => Date.now();
+
+function loadInv(){
+  try{
+    const raw = localStorage.getItem(INV_KEY);
+    const obj = raw ? JSON.parse(raw) : null;
+    if (obj && obj.version === 2 && obj.byItem && obj.stamps) return obj;
+  }catch(_) {}
+  // ここに来るのは「初回 or パージ直後」→ 空の新スキーマで開始
+  const neo = { version:2, total:0, byItem:{}, stamps:{} };
+  localStorage.setItem(INV_KEY, JSON.stringify(neo));
+  return neo;
+}
+
     let inv = loadInv();
     function saveInv(){ try{ localStorage.setItem(INV_KEY, JSON.stringify(inv)); }catch{} }
     function addToInv(name, qty=1){
@@ -849,6 +868,7 @@ attachDataBindings(); // ← これ一回だけでOK。以降 TEAM は固定。
   </script>
 </body>
 </html>
+
 
 
 
