@@ -447,8 +447,7 @@ function getTeamFromURL(){
 
     /* =====================  ローカル在庫（手持ち）  ===================== */
 // 24h 失効の定数（まだ無ければ）
-const EXPIRE_MS = 24 * 60 * 60 * 1000;
-const nowMs = () => Date.now();
+
 
 function loadInv(){
   try{
@@ -462,18 +461,86 @@ function loadInv(){
   return neo;
 }
 
-    let inv = loadInv();
-    function saveInv(){ try{ localStorage.setItem(INV_KEY, JSON.stringify(inv)); }catch{} }
-    function addToInv(name, qty=1){
-      inv.total += qty; inv.byItem[name] = (inv.byItem[name]||0)+qty; if (inv.byItem[name]<=0){ delete inv.byItem[name] }
-      saveInv(); renderInv();
+let inv = loadInv();
+
+function saveInv(){
+  try{ localStorage.setItem(INV_KEY, JSON.stringify(inv)); }catch{}
+}
+
+// 期限切れアイテムを掃除（24h）
+function pruneExpiredInv(){
+  if (!inv || inv.version !== 2) return;
+  const now = nowMs();
+  inv.stamps = inv.stamps || {};
+  let deltaTotal = 0;
+
+  for (const name of Object.keys(inv.byItem || {})){
+    const qty = inv.byItem[name] | 0;
+    let arr = Array.isArray(inv.stamps[name]) ? inv.stamps[name] : [];
+
+    // stampsと数量の整合
+    if (arr.length < qty){ arr = arr.concat(Array(qty - arr.length).fill(now)); }
+    if (arr.length > qty){ arr = arr.slice(0, qty); }
+
+    // 期限内だけ残す
+    const keep = arr.filter(t => (now - t) < EXPIRE_MS);
+    const removed = arr.length - keep.length;
+
+    if (removed > 0){
+      inv.byItem[name] = Math.max(0, qty - removed);
+      deltaTotal -= removed;
     }
-    function removeFromInv(name, qty=1){
-      if (!inv.byItem[name] || inv.byItem[name] < qty) return false;
-      inv.total -= qty; inv.byItem[name] -= qty;
-      if (inv.byItem[name] <= 0) delete inv.byItem[name];
-      saveInv(); renderInv(); return true;
+
+    if (inv.byItem[name] <= 0){
+      delete inv.byItem[name];
+      delete inv.stamps[name];
+    }else{
+      inv.stamps[name] = keep;
     }
+  }
+
+  inv.total = Math.max(0, (inv.total | 0) + deltaTotal);
+  saveInv();
+}
+
+// 追加：取得時刻を記録
+function addToInv(name, qty=1){
+  if (qty <= 0) return;
+  inv.version = 2;
+  inv.byItem[name] = (inv.byItem[name] || 0) + qty;
+
+  inv.stamps = inv.stamps || {};
+  const arr = inv.stamps[name] = inv.stamps[name] || [];
+  const t = nowMs();
+  for (let i=0;i<qty;i++) arr.push(t);
+
+  inv.total += qty;
+  pruneExpiredInv();
+  renderInv();
+}
+
+// 削除：古いものから消費（先入れ先出し）
+function removeFromInv(name, qty=1){
+  if (qty <= 0) return false;
+  if (!inv.byItem[name] || inv.byItem[name] < qty) return false;
+
+  inv.byItem[name] -= qty;
+  inv.total -= qty;
+
+  if (inv.version === 2){
+    inv.stamps = inv.stamps || {};
+    const arr = inv.stamps[name] = inv.stamps[name] || [];
+    arr.splice(0, Math.min(qty, arr.length)); // FIFO
+    if (arr.length === 0) delete inv.stamps[name];
+  }
+
+  if (inv.byItem[name] <= 0) delete inv.byItem[name];
+
+  saveInv();
+  renderInv();
+  return true;
+}
+
 
     /* =====================  倉庫集計（チーム別）  ===================== */
 const warehouseList = document.getElementById('warehouseList');
@@ -859,7 +926,12 @@ onValue(warehouseRef(), (snap)=>{
 
 /* =====================  起動  ===================== */
 initSlots();
-renderInv();
+ pruneExpiredInv();    // 起動直後にまず掃除
+ renderInv();
+ setInterval(()=>{     // 放置中でも自動で期限切れを掃除
+   pruneExpiredInv();
+   renderInv();
+ }, 60 * 1000);
 attachDataBindings(); // ← これ一回だけでOK。以降 TEAM は固定。
 
 
@@ -868,6 +940,7 @@ attachDataBindings(); // ← これ一回だけでOK。以降 TEAM は固定。
   </script>
 </body>
 </html>
+
 
 
 
