@@ -692,28 +692,6 @@ function rollDrops(seed){
   return out;
 }
 
-// ★ 任意アイテムを複数個追加（上限チェック込み）
-function addItemToInv(name, qty=1){
-  for (let i=0; i<qty; i++){
-    if (inventory.total >= INV_LIMIT){
-      showToast("インベントリがいっぱいです");
-      return false;
-    }
-    inventory.total++;
-  }
-  inventory.byName[name] = (inventory.byName[name] || 0) + qty;
-  saveInv();
-  renderInventory();
-  return true;
-}
-
-// 既存の addHarvestToInv を“収穫1個専用＋トースト”にして利用
-function addHarvestToInv({ name }){
-  const ok = addItemToInv(name, 1);
-  if (ok) showToast(`+1 ${name} を収穫！`);
-  return ok;
-}
-
   </script>
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
@@ -776,6 +754,7 @@ function addHarvestToInv({ name }){
 
 </body>
 </html>
+
 
 
 
