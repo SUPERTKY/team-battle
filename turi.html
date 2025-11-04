@@ -519,19 +519,21 @@ function init(){
 }
   // === Inventory 初期化/UIイベント ===
 addEventListener('load', () => {
+  pruneExpiredInv();         // ★ 起動時にまず掃除
   renderInventory();
 
-  const btn = document.getElementById('invBtn');
-  const clr = document.getElementById('invClearBtn');
-  btn && btn.addEventListener('click', toggleInventory);
-  clr && clr.addEventListener('click', clearInventory);
+  // 毎分掃除
+  setInterval(()=>{ pruneExpiredInv(); renderInventory(); }, 60 * 1000);
 
-  // キー操作: Iで開閉 / Cで全消去
+  const btn = document.getElementById('invBtn');
+  btn && btn.addEventListener('click', toggleInventory);
+
+  // 任意: I で開閉
   addEventListener('keydown', (e)=>{
     if(e.key==='i' || e.key==='I'){ toggleInventory(); }
-    if(e.key==='c' || e.key==='C'){ clearInventory(); }
   });
 });
+
 
 addEventListener('load',init);
   // === Inventory ===
@@ -840,6 +842,7 @@ const firebaseConfig = {
 
 </body>
 </html>
+
 
 
 
