@@ -469,7 +469,6 @@ function loadInv(){
      return j ? JSON.parse(j) : { total:0, byName:{} };
    }catch(_){ return { total:0, byName:{} }; }
  }
- function saveInv(){ localStorage.setItem(INV_KEY, JSON.stringify(inv)); }
 function saveInv(){ try{ localStorage.setItem(INV_KEY, JSON.stringify(inv)); }catch(_){} }
 
 // 既存の dropLoot から呼ばれる想定
@@ -487,7 +486,7 @@ function renderInventory(){
   if(!invMeta || !invList) return;
   invMeta.textContent = `合計 ${inv.total} 個`;
 
-  const entries = Object.entries(inv.byItem).sort((a,b)=> a[0].localeCompare(b[0],'ja'));
+ const entries = Object.entries(inv.byName).sort((a,b)=> a[0].localeCompare(b[0],'ja'));
   invList.innerHTML = '';
 
   for (const [name, count] of entries){
@@ -505,7 +504,7 @@ function renderInventory(){
    <button class="btnDrop inv-action">捨てる</button>
  `;
 
-const btnStore = rowCtrl.querySelector('.btnStore');
+const btnStore = actionCell.querySelector('.btnStore');
  btnStore.addEventListener('click', async (e)=>{
    const btn = e.currentTarget;
    if (btn.dataset.busy === '1') return;
@@ -532,14 +531,14 @@ const btnStore = rowCtrl.querySelector('.btnStore');
 
 
     // 捨てる
-    actionCell.querySelector('.btnDrop').addEventListener('click', ()=>{
-      if (inv.byItem[name]){
-        inv.total--;
-        if (--inv.byItem[name] <= 0) delete inv.byItem[name];
-        saveInv(); renderInventory();
-        showToast?.(`${name} を捨てました`);
-      }
-    });
+
+ actionCell.querySelector('.btnDrop').addEventListener('click', ()=>{
+   inv.total = Math.max(0, inv.total - 1);
+   inv.byName[name] = Math.max(0, (inv.byName[name]||0) - 1);
+   if (inv.byName[name] <= 0) delete inv.byName[name];
+   saveInv(); renderInventory();
+   showToast?.(`${name} を捨てました`);
+ });
 
     invList.appendChild(nameCell);
     invList.appendChild(actionCell);
@@ -548,7 +547,7 @@ const btnStore = rowCtrl.querySelector('.btnStore');
 
 // 開閉
 function toggleInventory(){ invPanel.classList.toggle('hidden'); }
-+ invBtn?.addEventListener('click', toggleInventory);
+ invBtn?.addEventListener('click', toggleInventory);
 
 // 初期描画
 renderInventory();
@@ -874,6 +873,7 @@ function fleeActor(img){
 
 </body>
 </html>
+
 
 
 
