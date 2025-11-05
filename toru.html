@@ -695,7 +695,7 @@ function rollDrops(seed){
   </script>
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
-  import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
+  import { getAuth, signInAnonymously, onAuthStateChanged, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
  import { getDatabase, ref, set, onDisconnect, push, onValue, runTransaction } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js";
   // ★必ず databaseURL を入れる！
   const firebaseConfig = {
@@ -711,12 +711,15 @@ function rollDrops(seed){
   const app = initializeApp(firebaseConfig);
   const db  = getDatabase(app);
 const auth = getAuth(app);
- 
- // ★同一オリジンの別HTMLでも同じ uid を共有するための匿名ログイン
- const EVENT_ID = "your-event-id";                 // ここは全ページで同じIDに
+ const EVENT_ID = "your-event-id";
  const TAB_ID   = (crypto?.randomUUID?.() ?? String(Math.random()).slice(2));
- 
- await signInAnonymously(auth);
+
+ // 永続化を明示 → 既存セッション復元の完了を待つ → 無ければ匿名ログイン
+ await setPersistence(auth, browserLocalPersistence);
+ await auth.authStateReady();
+ if (!auth.currentUser) {
+   await signInAnonymously(auth);
+ }
  onAuthStateChanged(auth, async (user) => {
    if (!user) return;
    // ユーザー(uid) × タブ(tabId)で在席を記録し、切断時に自動削除
@@ -769,6 +772,7 @@ const auth = getAuth(app);
 
 </body>
 </html>
+
 
 
 
