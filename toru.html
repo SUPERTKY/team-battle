@@ -727,7 +727,7 @@ function rollDrops(seed){
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
   import {
-    getDatabase, ref, set, onDisconnect
+    getDatabase, ref, set, onDisconnect, runTransaction
   } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js";
   import {
     initializeAuth,
@@ -837,7 +837,7 @@ onAuthStateChanged(auth, async (user) => {
 
 
   // 他スクリプトが使う用
-  window.firebaseDB = { db, ref, onDisconnect, set };
+  window.firebaseDB = { db, ref, onDisconnect, set, runTransaction };
   // ========= ここまで重要 =========
 </script>
 
@@ -847,6 +847,7 @@ onAuthStateChanged(auth, async (user) => {
 
 </body>
 </html>
+
 
 
 
