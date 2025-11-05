@@ -763,90 +763,150 @@ function pushGetReport(species){
 </script>
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
- import { getAuth, signInAnonymously, onAuthStateChanged, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
- import { getDatabase, ref, set, onDisconnect, push, onValue, runTransaction } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js";
+  import {
+    initializeAuth,
+    indexedDBLocalPersistence,
+    browserLocalPersistence,
+    signInAnonymously,
+    onAuthStateChanged
+  } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
+  import {
+    getDatabase, ref, set, onDisconnect, onValue, runTransaction
+  } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js";
 
-const firebaseConfig = {
-  apiKey: "AIzaSyDPe5cSCavq5gHopugdOfQ-9_50cTrqmyk",
-  authDomain: "school-178c2.firebaseapp.com",
-  databaseURL: "https://school-178c2-default-rtdb.europe-west1.firebasedatabase.app",
-  projectId: "school-178c2",
-  storageBucket: "school-178c2.firebasestorage.app",
-  messagingSenderId: "409885673101",
-  appId: "1:409885673101:web:25bf0483547e2d470304c4"
-};
+  // あなたの設定
+  const firebaseConfig = {
+    apiKey: "AIzaSyDPe5cSCavq5gHopugdOfQ-9_50cTrqmyk",
+    authDomain: "school-178c2.firebaseapp.com",
+    databaseURL: "https://school-178c2-default-rtdb.europe-west1.firebasedatabase.app",
+    projectId: "school-178c2",
+    storageBucket: "school-178c2.firebasestorage.app",
+    messagingSenderId: "409885673101",
+    appId: "1:409885673101:web:25bf0483547e2d470304c4"
+  };
+
   const app = initializeApp(firebaseConfig);
-  const db = getDatabase(app);
-  // === 匿名Auth + presence（同一オリジンで uid を共有） ===
-  const auth = getAuth(app);
- const EVENT_ID = "your-event-id";
- const TAB_ID   = (crypto?.randomUUID?.() ?? String(Math.random()).slice(2));
+  const db  = getDatabase(app);
 
- // 永続化を明示 → 既存セッション復元の完了を待つ → 無ければ匿名ログイン
- await setPersistence(auth, browserLocalPersistence);
- await auth.authStateReady();
- if (!auth.currentUser) {
-   await signInAnonymously(auth);
- }
- onAuthStateChanged(auth, async (user) => {
-    if (!user) return;
-    const myRef = ref(db, `rooms/${EVENT_ID}/presence/${user.uid}/${TAB_ID}`);
-    await set(myRef, true);
-    onDisconnect(myRef).remove();               // タブ終了時に自動削除
-    window.CURRENT_UID = user.uid;              // 必要なら参照
+  // ① Authを明示初期化（IndexedDB→localStorageの順でフォールバック）
+  const auth = initializeAuth(app, {
+    persistence: [indexedDBLocalPersistence, browserLocalPersistence]
   });
-// === グローバル一時停止フック ===
-(function installGlobalPause(db){
-  let paused = false;
 
-  // オーバーレイ生成
-  const overlay = document.createElement('div');
-  overlay.style.cssText = `
-    position:fixed; inset:0; display:none; z-index:99999;
-    backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
-    background: rgba(0,0,0,.65); color:#fff;
-    font:600 18px/1.4 system-ui, -apple-system, "Noto Sans JP", sans-serif;
-    align-items:center; justify-content:center; text-align:center; padding:24px;
-  `;
-  overlay.innerHTML = `
-    <div style="max-width:740px;">
-      <div style="font-size:22px; margin-bottom:8px;">一時停止中</div>
-      <div id="__pauseMsg" style="opacity:.9;"></div>
-    </div>`;
-  document.body.appendChild(overlay);
-  const msgEl = overlay.querySelector('#__pauseMsg');
+  // ② タブ間ロック：サインインは“1タブだけ”が実行
+  const AUTH_LOCK_KEY = "auth_signin_lock_v1";
+  const AUTH_BC_CH    = "auth_signin_bc_v1";
+  const bc = ("BroadcastChannel" in window) ? new BroadcastChannel(AUTH_BC_CH) : null;
 
-  // 状態購読（game/control/state）
-  onValue(ref(db, 'game/control/state'), (snap)=>{
-    const s = snap.exists()? snap.val(): null;
-    paused = !!(s && s.paused);
-    if (paused){
-      msgEl.textContent = s?.message || 'オーナーが一時停止しました';
-      overlay.style.display = 'flex';
-    }else{
-      overlay.style.display = 'none';
+  bc?.addEventListener("message", (ev) => {
+    if (ev?.data === "signed-in") {
+      try { localStorage.removeItem(AUTH_LOCK_KEY); } catch {}
     }
   });
 
-  // 入力ブロック（キャプチャ段階）
-  const block = (e)=>{ if (paused){ e.stopPropagation(); e.preventDefault(); } };
-  ['click','mousedown','mouseup','touchstart','touchend','keydown','keyup','pointerdown','pointerup'].forEach(type=>{
-    document.addEventListener(type, block, true);
+  function tryAcquireLock(){
+    const now = Date.now();
+    try{
+      const raw = localStorage.getItem(AUTH_LOCK_KEY);
+      const t = raw ? Number(raw) : 0;
+      if (!raw || !t || (now - t) > 10000) {      // 10秒で期限切れ
+        localStorage.setItem(AUTH_LOCK_KEY, String(now));
+        return true;
+      }
+    }catch{}
+    return false;
+  }
+  function releaseLock(){ try{ localStorage.removeItem(AUTH_LOCK_KEY); }catch{} }
+
+  // ③ 既存セッション復元を待機 → 無ければ“1タブだけ”匿名サインイン
+  await auth.authStateReady();
+
+  if (!auth.currentUser) {
+    const iAmLeader = tryAcquireLock();
+    if (iAmLeader) {
+      try {
+        await signInAnonymously(auth);
+        bc?.postMessage("signed-in");
+      } finally {
+        releaseLock();
+      }
+    } else {
+      // リーダータブの処理を最大12秒待つ
+      const until = Date.now() + 12000;
+      while (!auth.currentUser && Date.now() < until) {
+        await new Promise(r => setTimeout(r, 200));
+      }
+      // それでも未サインインなら保険で自分が実行
+      if (!auth.currentUser) {
+        const got = tryAcquireLock();
+        if (got) {
+          try {
+            await signInAnonymously(auth);
+            bc?.postMessage("signed-in");
+          } finally {
+            releaseLock();
+          }
+        }
+      }
+    }
+  }
+
+  // ④ presence（ユーザー×タブ）登録
+  const EVENT_ID = "your-event-id";
+  const TAB_ID   = (crypto?.randomUUID?.() ?? String(Math.random()).slice(2));
+
+  onAuthStateChanged(auth, async (user) => {
+    if (!user) return;
+    const myRef = ref(db, `rooms/${EVENT_ID}/presence/${user.uid}/${TAB_ID}`);
+    await set(myRef, true);
+    onDisconnect(myRef).remove();
+    window.CURRENT_UID = user.uid; // 必要なら他スクリプトが参照
   });
 
-  // 必要なら各アクションの先頭で呼べるガード
-  window.assertNotPaused = function(){
-    if (paused) throw new Error('PAUSED');
-  };
-})(db);
+  // ⑤ 一時停止フック（既存UIに合わせて据え置き）
+  (function installGlobalPause(db){
+    let paused = false;
+    const overlay = document.createElement('div');
+    overlay.style.cssText = `
+      position:fixed; inset:0; display:none; z-index:99999;
+      backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+      background: rgba(0,0,0,.65); color:#fff;
+      font:600 18px/1.4 system-ui, -apple-system, "Noto Sans JP", sans-serif;
+      align-items:center; justify-content:center; text-align:center; padding:24px;
+    `;
+    overlay.innerHTML = `
+      <div style="max-width:740px;">
+        <div style="font-size:22px; margin-bottom:8px;">一時停止中</div>
+        <div id="__pauseMsg" style="opacity:.9;"></div>
+      </div>`;
+    document.body.appendChild(overlay);
+    const msgEl = overlay.querySelector('#__pauseMsg');
 
-  // 他のスクリプトから使えるように window に載せる
-  window.firebaseDB = { db, ref, push, runTransaction };
+    onValue(ref(db, 'game/control/state'), (snap)=>{
+      const s = snap.exists()? snap.val(): null;
+      paused = !!(s && s.paused);
+      overlay.style.display = paused ? 'flex' : 'none';
+      if (paused) msgEl.textContent = s?.message || 'オーナーが一時停止しました';
+    });
+
+    const block = (e)=>{ if (paused){ e.stopPropagation(); e.preventDefault(); } };
+    ['click','mousedown','mouseup','touchstart','touchend','keydown','keyup','pointerdown','pointerup']
+      .forEach(t=> document.addEventListener(t, block, true));
+
+    window.assertNotPaused = function(){
+      if (paused) throw new Error('PAUSED');
+    };
+  })(db);
+
+  // 倉庫ボタン等から使えるように公開
+  window.firebaseDB = { db, ref, onValue, runTransaction };
 </script>
+
 
 
 </body>
 </html>
+
 
 
 
