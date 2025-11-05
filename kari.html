@@ -890,7 +890,7 @@ function fleeActor(img){
   <!-- Firebase（倉庫保存用） -->
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
- import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
+ import { getAuth, signInAnonymously, onAuthStateChanged, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
  import { getDatabase, ref, set, onDisconnect, push, onValue, runTransaction } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js";
 
   // ★あなたが使っていた設定
@@ -908,12 +908,16 @@ function fleeActor(img){
   const db  = getDatabase(app);
   // ★ 追加：匿名Auth（同一オリジンなら別HTMLでも同じ uid）
 const auth = getAuth(app);
-const EVENT_ID = "your-event-id"; // 全ページで同じIDに
-const TAB_ID = (crypto?.randomUUID?.() ?? String(Math.random()).slice(2));
+ const EVENT_ID = "your-event-id";
+ const TAB_ID   = (crypto?.randomUUID?.() ?? String(Math.random()).slice(2));
 
-// 匿名でサインインして presence を張る
-await signInAnonymously(auth);
-onAuthStateChanged(auth, async (user) => {
+ // 永続化を明示 → 既存セッション復元の完了を待つ → 無ければ匿名ログイン
+ await setPersistence(auth, browserLocalPersistence);
+ await auth.authStateReady();
+ if (!auth.currentUser) {
+   await signInAnonymously(auth);
+ }
+ onAuthStateChanged(auth, async (user) => {
   if (!user) return;
 
   // ユーザー単位 × タブ単位の presence
@@ -976,6 +980,7 @@ onAuthStateChanged(auth, async (user) => {
 
 </body>
 </html>
+
 
 
 
