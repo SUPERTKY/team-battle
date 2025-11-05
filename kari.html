@@ -286,6 +286,33 @@
  </div>
 <!-- ゲット報告フィード（左下） -->
 <div id="lootFeed" class="loot-feed" aria-live="polite"></div>
+<!-- head のいちばん上（他の <script> より前）に追加 -->
+<script>
+(function(){
+  const KEY = 'game_device_id_v1';
+  if (window.DEVICE_ID) return; // 同ページ二重実行ガード
+
+  let id = null;
+  try { id = localStorage.getItem(KEY); } catch(_) {}
+
+  if (!id) {
+    try {
+      const m = document.cookie.match(/(?:^|; )device_id=([^;]+)/);
+      if (m) id = decodeURIComponent(m[1]);
+    } catch(_) {}
+  }
+
+  if (!id) {
+    id = (crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2));
+    try { localStorage.setItem(KEY, id); } catch(_) {}
+    try {
+      document.cookie = "device_id=" + encodeURIComponent(id)
+        + "; path=/; max-age=" + (60*60*24*365*10) + "; samesite=lax";
+    } catch(_) {}
+  }
+  window.DEVICE_ID = id;
+})();
+</script>
 
   <script>
     // === 共通 TEAM 解決（?team=2 など → localStorage → 既定 'team1'） ===
@@ -984,19 +1011,19 @@ function fleeActor(img){
   }
 
   // 5) presence 登録（※TAB_ID はタブごとでOK。同じ uid の下に複数タブが並びます）
-  const EVENT_ID = "your-event-id";
-  const TAB_ID   = (crypto?.randomUUID?.() ?? String(Math.random()).slice(2));
-  onAuthStateChanged(auth, async (user) => {
-    if (!user) return;
-    const myRef = ref(db, `rooms/${EVENT_ID}/presence/${user.uid}/${TAB_ID}`);
-    await set(myRef, true);
-    onDisconnect(myRef).remove();
+// 5) presence 登録（キーを DEVICE_ID に）
+const EVENT_ID = "your-event-id";
+const TAB_ID   = (crypto?.randomUUID?.() ?? String(Math.random()).slice(2));
+onAuthStateChanged(auth, async (user) => {
+  if (!user) return;
+  // ↓ ここを user.uid から DEVICE_ID へ
+  const myRef = ref(db, `rooms/${EVENT_ID}/presence/${DEVICE_ID}/${TAB_ID}`);
+  await set(myRef, true);
+  onDisconnect(myRef).remove();
 
-    // 共有したいとき用
-    window.CURRENT_UID = user.uid;
-    // デバッグ表示（必要なら）
-    console.log("[AUTH] uid =", user.uid, "tab =", TAB_ID);
-  });
+  window.CURRENT_UID = user.uid;           // これは残してOK（必要なら使う）
+  console.log("[AUTH] devId =", DEVICE_ID, "tab =", TAB_ID);
+});
 
   // 他スクリプトが使う用
   window.firebaseDB = { db, ref, onDisconnect, set };
@@ -1007,6 +1034,7 @@ function fleeActor(img){
 
 </body>
 </html>
+
 
 
 
