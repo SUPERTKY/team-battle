@@ -694,9 +694,8 @@ function rollDrops(seed){
 
   </script>
 <script type="module">
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
-  import { getDatabase, ref, push, onValue, runTransaction } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js";
-
+  import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
+ import { getDatabase, ref, set, onDisconnect, push, onValue, runTransaction } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js";
   // ★必ず databaseURL を入れる！
   const firebaseConfig = {
     apiKey: "AIzaSyDPe5cSCavq5gHopugdOfQ-9_50cTrqmyk",
@@ -710,7 +709,22 @@ function rollDrops(seed){
 
   const app = initializeApp(firebaseConfig);
   const db  = getDatabase(app);
-
+const auth = getAuth(app);
+ 
+ // ★同一オリジンの別HTMLでも同じ uid を共有するための匿名ログイン
+ const EVENT_ID = "your-event-id";                 // ここは全ページで同じIDに
+ const TAB_ID   = (crypto?.randomUUID?.() ?? String(Math.random()).slice(2));
+ 
+ await signInAnonymously(auth);
+ onAuthStateChanged(auth, async (user) => {
+   if (!user) return;
+   // ユーザー(uid) × タブ(tabId)で在席を記録し、切断時に自動削除
+   const myRef = ref(db, `rooms/${EVENT_ID}/presence/${user.uid}/${TAB_ID}`);
+   await set(myRef, true);
+   onDisconnect(myRef).remove();
+   // 必要なら他スクリプトで参照
+   window.CURRENT_UID = user.uid;
+ });
   // 他スクリプトが使うために公開（Authは載せない）
   window.firebaseDB = { db, ref, push, onValue, runTransaction };
 
@@ -754,6 +768,7 @@ function rollDrops(seed){
 
 </body>
 </html>
+
 
 
 
