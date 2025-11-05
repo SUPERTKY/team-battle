@@ -763,7 +763,7 @@ function pushGetReport(species){
 </script>
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
- import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
+ import { getAuth, signInAnonymously, onAuthStateChanged, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
  import { getDatabase, ref, set, onDisconnect, push, onValue, runTransaction } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js";
 
 const firebaseConfig = {
@@ -779,11 +779,16 @@ const firebaseConfig = {
   const db = getDatabase(app);
   // === 匿名Auth + presence（同一オリジンで uid を共有） ===
   const auth = getAuth(app);
-  const EVENT_ID = "your-event-id";             // 他ページと同一のIDに
-  const TAB_ID   = (crypto?.randomUUID?.() ?? String(Math.random()).slice(2));
+ const EVENT_ID = "your-event-id";
+ const TAB_ID   = (crypto?.randomUUID?.() ?? String(Math.random()).slice(2));
 
-  await signInAnonymously(auth);
-  onAuthStateChanged(auth, async (user) => {
+ // 永続化を明示 → 既存セッション復元の完了を待つ → 無ければ匿名ログイン
+ await setPersistence(auth, browserLocalPersistence);
+ await auth.authStateReady();
+ if (!auth.currentUser) {
+   await signInAnonymously(auth);
+ }
+ onAuthStateChanged(auth, async (user) => {
     if (!user) return;
     const myRef = ref(db, `rooms/${EVENT_ID}/presence/${user.uid}/${TAB_ID}`);
     await set(myRef, true);
@@ -842,6 +847,7 @@ const firebaseConfig = {
 
 </body>
 </html>
+
 
 
 
