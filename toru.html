@@ -696,17 +696,17 @@ function rollDrops(seed){
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
   import {
+    getDatabase, ref, set, onDisconnect
+  } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js";
+  import {
     initializeAuth,
     indexedDBLocalPersistence,
     browserLocalPersistence,
-    signInAnonymously,
-    onAuthStateChanged
+    onAuthStateChanged,
+    signInAnonymously
   } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
-  import {
-    getDatabase, ref, set, onDisconnect, push, onValue, runTransaction
-  } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js";
 
-  // ★必ず databaseURL を入れる！
+  // ==== あなたの設定（そのまま） ====
   const firebaseConfig = {
     apiKey: "AIzaSyDPe5cSCavq5gHopugdOfQ-9_50cTrqmyk",
     authDomain: "school-178c2.firebaseapp.com",
@@ -720,137 +720,101 @@ function rollDrops(seed){
   const app = initializeApp(firebaseConfig);
   const db  = getDatabase(app);
 
-  // =========================
-  // ① Auth を明示初期化（永続化スタック）
-  // =========================
+  // ========= ここから重要 =========
+  // 1) Auth を明示初期化（IndexedDB→LocalStorage の順で永続化）
   const auth = initializeAuth(app, {
-    persistence: [indexedDBLocalPersistence, browserLocalPersistence]
+    persistence: [indexedDBLocalPersistence, browserLocalPersistence],
   });
 
-  // =========================
-  // ② タブ間ロック（初回サインイン競合の回避）
-  // =========================
-  const AUTH_LOCK_KEY = "auth_signin_lock_v1";
-  const AUTH_BC_CH    = "auth_signin_bc_v1";
-  const bc = ("BroadcastChannel" in window) ? new BroadcastChannel(AUTH_BC_CH) : null;
+  // 2) 複数タブの同時 signIn を抑止するロック & ブロードキャスト
+  const AUTH_LOCK_KEY = "fb_auth_lock_v1";
+  const AUTH_CH       = "fb_auth_bc_v1";
+  const bc = ("BroadcastChannel" in window) ? new BroadcastChannel(AUTH_CH) : null;
 
-  // 他タブがサインイン完了を知らせたら解除
-  bc?.addEventListener("message", (ev) => {
-    if (ev?.data === "signed-in") {
-      try { localStorage.removeItem(AUTH_LOCK_KEY); } catch {}
-    }
-  });
-
-  // ロック取得（簡易版・有効期限 10秒）
-  function tryAcquireLock(){
+  function acquireLock() {
     const now = Date.now();
-    try{
+    try {
       const raw = localStorage.getItem(AUTH_LOCK_KEY);
-      const stamp = raw ? Number(raw) : 0;
-      if (!raw || !stamp || (now - stamp) > 10000) {
+      const t = raw ? Number(raw) : 0;
+      // 10秒で期限切れにして、落ちたタブのロックを回収
+      if (!raw || !t || (now - t) > 10000) {
         localStorage.setItem(AUTH_LOCK_KEY, String(now));
         return true;
       }
-    }catch{}
+    } catch {}
     return false;
   }
-  function releaseLock(){
-    try{ localStorage.removeItem(AUTH_LOCK_KEY); }catch{}
-  }
+  function releaseLock() { try { localStorage.removeItem(AUTH_LOCK_KEY); } catch {} }
 
-  // =========================
-  // ③ 既存復元→未サインインなら“1タブだけ”匿名作成
-  // =========================
+  // 3) 既存セッションの復元完了を待つ
   await auth.authStateReady();
 
+  // 4) まだログインしていなければ、どれか1タブだけが匿名サインイン
   if (!auth.currentUser) {
-    // どのタブがサインイン担当になるか
-    const iAmLeader = tryAcquireLock();
+    const iAmLeader = acquireLock();
     if (iAmLeader) {
       try {
         await signInAnonymously(auth);
-        bc?.postMessage("signed-in");
+        bc?.postMessage({ type: "signed-in" });
       } finally {
         releaseLock();
       }
     } else {
-      // リーダータブがサインインしてくるのを少し待つ
-      const waitUntil = Date.now() + 12000; // 最大12秒待ち
-      while (!auth.currentUser && Date.now() < waitUntil) {
-        await new Promise(r => setTimeout(r, 200));
-      }
-      // それでも未サインインなら（リーダー不在等）自分が実行
+      // リーダータブがサインイン完了するのを待機（最大12秒）
+      const until = Date.now() + 12000;
+      let ready = false;
+      const wait = new Promise((resolve) => {
+        const onMsg = (ev) => {
+          if (ev?.data?.type === "signed-in") { ready = true; resolve(); }
+        };
+        bc?.addEventListener?.("message", onMsg, { once: true });
+        setTimeout(resolve, 12000);
+      });
+      await wait;
+
+      // それでも currentUser が居なければ最後の切り札で signIn
+      await auth.authStateReady();
       if (!auth.currentUser) {
-        try {
-          const gotLock = tryAcquireLock();
-          if (gotLock) {
+        const got = acquireLock();
+        if (got) {
+          try {
             await signInAnonymously(auth);
-            bc?.postMessage("signed-in");
+            bc?.postMessage({ type: "signed-in" });
+          } finally {
+            releaseLock();
           }
-        } finally {
-          releaseLock();
         }
       }
     }
   }
 
-  // =========================
-  // ④ presence 登録（タブ単位）
-  // =========================
+  // 5) presence 登録（※TAB_ID はタブごとでOK。同じ uid の下に複数タブが並びます）
   const EVENT_ID = "your-event-id";
   const TAB_ID   = (crypto?.randomUUID?.() ?? String(Math.random()).slice(2));
-
   onAuthStateChanged(auth, async (user) => {
     if (!user) return;
     const myRef = ref(db, `rooms/${EVENT_ID}/presence/${user.uid}/${TAB_ID}`);
     await set(myRef, true);
     onDisconnect(myRef).remove();
+
+    // 共有したいとき用
     window.CURRENT_UID = user.uid;
+    // デバッグ表示（必要なら）
+    console.log("[AUTH] uid =", user.uid, "tab =", TAB_ID);
   });
 
-  // 他スクリプトが使うために公開（Authは不要）
-  window.firebaseDB = { db, ref, push, onValue, runTransaction };
-
-  /* === 一時停止フック（DBのみでOK） === */
-  (function installGlobalPause(db){
-    let paused = false;
-    const overlay = document.createElement('div');
-    overlay.style.cssText = `
-      position:fixed; inset:0; display:none; z-index:99999;
-      backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
-      background: rgba(0,0,0,.65); color:#fff;
-      font:600 18px/1.4 system-ui,-apple-system,"Noto Sans JP",sans-serif;
-      align-items:center; justify-content:center; text-align:center; padding:24px;`;
-    overlay.innerHTML = `
-      <div style="max-width:740px;">
-        <div style="font-size:22px; margin-bottom:8px;">一時停止中</div>
-        <div id="__pauseMsg" style="opacity:.9;"></div>
-      </div>`;
-    document.body.appendChild(overlay);
-    const msgEl = overlay.querySelector('#__pauseMsg');
-
-    onValue(ref(db, 'game/control/state'), (snap)=>{
-      const s = snap.exists()? snap.val(): null;
-      paused = !!(s && s.paused);
-      overlay.style.display = paused ? 'flex' : 'none';
-      if (paused) msgEl.textContent = s?.message || 'オーナーが一時停止しました';
-    });
-
-    const block = (e)=>{ if (paused){ e.stopPropagation(); e.preventDefault(); } };
-    ['click','mousedown','mouseup','touchstart','touchend','keydown','keyup','pointerdown','pointerup']
-      .forEach(t=> document.addEventListener(t, block, true));
-
-    window.assertNotPaused = function(){
-      if (paused) throw new Error('PAUSED');
-    };
-  })(db);
+  // 他スクリプトが使う用
+  window.firebaseDB = { db, ref, onDisconnect, set };
+  // ========= ここまで重要 =========
 </script>
+
 
 
 
 
 </body>
 </html>
+
 
 
 
