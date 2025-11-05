@@ -310,20 +310,7 @@ function debugCatchLog({rank,species,sizePx,hpLeft}){
     `[CATCH] rank=${rank} species=${species} size=${Math.round(sizePx)}px hpLeft=${hpLeft}`
   );
 }
-// 端への接近度（0〜1）。1に近いほど端ギリギリ
-function edgeProximity(x, y, w, h, margin = CONFIG.EDGE_MARGIN) {
-  const dx = Math.min(x - margin, (w - margin) - x);
-  const dy = Math.min(y - margin, (h - margin) - y);
-  const nx = clamp(1 - (dx / margin), 0, 1);
-  const ny = clamp(1 - (dy / margin), 0, 1);
-  return Math.max(nx, ny);
-}
 
-// 角度補間（短い回転方向で補間）
-function lerpAngle(a, b, t){
-  const diff = ((b - a + 540) % 360) - 180;
-  return a + diff * t;
-}
 
 
 const stage = document.getElementById('stage');
@@ -776,8 +763,8 @@ function pushGetReport(species){
 </script>
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
- import { getDatabase, ref, push, onValue, runTransaction } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js";
-
+ import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
+ import { getDatabase, ref, set, onDisconnect, push, onValue, runTransaction } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyDPe5cSCavq5gHopugdOfQ-9_50cTrqmyk",
@@ -790,6 +777,19 @@ const firebaseConfig = {
 };
   const app = initializeApp(firebaseConfig);
   const db = getDatabase(app);
+  // === 匿名Auth + presence（同一オリジンで uid を共有） ===
+  const auth = getAuth(app);
+  const EVENT_ID = "your-event-id";             // 他ページと同一のIDに
+  const TAB_ID   = (crypto?.randomUUID?.() ?? String(Math.random()).slice(2));
+
+  await signInAnonymously(auth);
+  onAuthStateChanged(auth, async (user) => {
+    if (!user) return;
+    const myRef = ref(db, `rooms/${EVENT_ID}/presence/${user.uid}/${TAB_ID}`);
+    await set(myRef, true);
+    onDisconnect(myRef).remove();               // タブ終了時に自動削除
+    window.CURRENT_UID = user.uid;              // 必要なら参照
+  });
 // === グローバル一時停止フック ===
 (function installGlobalPause(db){
   let paused = false;
@@ -842,6 +842,7 @@ const firebaseConfig = {
 
 </body>
 </html>
+
 
 
 
