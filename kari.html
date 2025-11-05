@@ -49,7 +49,7 @@
   font:700 14px/1 system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans JP",sans-serif;
   cursor:pointer;
 }
-..top-controls .btn:active{ transform: translateY(1px); }
+.top-controls .btn:active{ transform: translateY(1px); }
 
 .inventory{
   position:fixed; top:60px; right:12px; width:min(90vw, 320px);
@@ -890,7 +890,8 @@ function fleeActor(img){
   <!-- Firebase（倉庫保存用） -->
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
- import { getDatabase, ref, push, onValue, runTransaction } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js";
+ import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
+ import { getDatabase, ref, set, onDisconnect, push, onValue, runTransaction } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js";
 
   // ★あなたが使っていた設定
   const firebaseConfig = {
@@ -905,6 +906,25 @@ function fleeActor(img){
 
   const app = initializeApp(firebaseConfig);
   const db  = getDatabase(app);
+  // ★ 追加：匿名Auth（同一オリジンなら別HTMLでも同じ uid）
+const auth = getAuth(app);
+const EVENT_ID = "your-event-id"; // 全ページで同じIDに
+const TAB_ID = (crypto?.randomUUID?.() ?? String(Math.random()).slice(2));
+
+// 匿名でサインインして presence を張る
+await signInAnonymously(auth);
+onAuthStateChanged(auth, async (user) => {
+  if (!user) return;
+
+  // ユーザー単位 × タブ単位の presence
+  const myRef = ref(db, `rooms/${EVENT_ID}/presence/${user.uid}/${TAB_ID}`);
+  await set(myRef, true);
+  onDisconnect(myRef).remove(); // タブ終了で自動削除
+
+  // 使い回したければグローバルへ
+  window.CURRENT_UID = user.uid;
+});
+
 // === グローバル一時停止フック ===
 (function installGlobalPause(db){
   let paused = false;
@@ -956,6 +976,7 @@ function fleeActor(img){
 
 </body>
 </html>
+
 
 
 
