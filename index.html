@@ -215,8 +215,6 @@ function initMenu(teamNum){
 const a = document.createElement("a");
 a.className = "btn";
 a.href = item.href;
-a.target = "_blank"; // ← これを追加！
-a.rel = "noopener noreferrer"; // ← セキュリティ上も推奨
 a.setAttribute("role","listitem");
 a.setAttribute("aria-label", `${item.name}を開く`);
 
@@ -265,7 +263,7 @@ a.setAttribute("aria-label", `${item.name}を開く`);
 window.addEventListener("keydown", (e) => {
   const idx = links.findIndex(l => l.key === e.key);
   if (idx !== -1){
-    window.open(links[idx].href, "_blank", "noopener,noreferrer");
+    window.location.assign(links[idx].href); // 履歴を残したいなら assign / 残さないなら replace
   }
 });
 
@@ -342,6 +340,7 @@ window.addEventListener("keydown", (e) => {
 
 </body>
 </html>
+
 
 
 
