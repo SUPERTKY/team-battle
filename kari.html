@@ -918,7 +918,7 @@ function fleeActor(img){
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
   import {
-    getDatabase, ref, set, onDisconnect
+    getDatabase, ref, set, onDisconnect, onValue, runTransaction
   } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js";
   import {
     initializeAuth,
@@ -942,13 +942,11 @@ function fleeActor(img){
   const app = initializeApp(firebaseConfig);
   const db  = getDatabase(app);
 
-  // ========= ここから重要 =========
-  // 1) Auth を明示初期化（IndexedDB→LocalStorage の順で永続化）
+  // ========= Auth（匿名） & 多タブ制御 =========
   const auth = initializeAuth(app, {
     persistence: [indexedDBLocalPersistence, browserLocalPersistence],
   });
 
-  // 2) 複数タブの同時 signIn を抑止するロック & ブロードキャスト
   const AUTH_LOCK_KEY = "fb_auth_lock_v1";
   const AUTH_CH       = "fb_auth_bc_v1";
   const bc = ("BroadcastChannel" in window) ? new BroadcastChannel(AUTH_CH) : null;
@@ -958,8 +956,7 @@ function fleeActor(img){
     try {
       const raw = localStorage.getItem(AUTH_LOCK_KEY);
       const t = raw ? Number(raw) : 0;
-      // 10秒で期限切れにして、落ちたタブのロックを回収
-      if (!raw || !t || (now - t) > 10000) {
+      if (!raw || !t || (now - t) > 10000) { // 10秒で期限切れ
         localStorage.setItem(AUTH_LOCK_KEY, String(now));
         return true;
       }
@@ -968,10 +965,8 @@ function fleeActor(img){
   }
   function releaseLock() { try { localStorage.removeItem(AUTH_LOCK_KEY); } catch {} }
 
-  // 3) 既存セッションの復元完了を待つ
   await auth.authStateReady();
 
-  // 4) まだログインしていなければ、どれか1タブだけが匿名サインイン
   if (!auth.currentUser) {
     const iAmLeader = acquireLock();
     if (iAmLeader) {
@@ -982,19 +977,15 @@ function fleeActor(img){
         releaseLock();
       }
     } else {
-      // リーダータブがサインイン完了するのを待機（最大12秒）
-      const until = Date.now() + 12000;
-      let ready = false;
       const wait = new Promise((resolve) => {
         const onMsg = (ev) => {
-          if (ev?.data?.type === "signed-in") { ready = true; resolve(); }
+          if (ev?.data?.type === "signed-in") resolve();
         };
         bc?.addEventListener?.("message", onMsg, { once: true });
         setTimeout(resolve, 12000);
       });
       await wait;
 
-      // それでも currentUser が居なければ最後の切り札で signIn
       await auth.authStateReady();
       if (!auth.currentUser) {
         const got = acquireLock();
@@ -1010,30 +1001,73 @@ function fleeActor(img){
     }
   }
 
-  // 5) presence 登録（※TAB_ID はタブごとでOK。同じ uid の下に複数タブが並びます）
-// 5) presence 登録（キーを DEVICE_ID に）
-const EVENT_ID = "your-event-id";
-const TAB_ID   = (crypto?.randomUUID?.() ?? String(Math.random()).slice(2));
-onAuthStateChanged(auth, async (user) => {
-  if (!user) return;
-  // ↓ ここを user.uid から DEVICE_ID へ
-  const myRef = ref(db, `rooms/${EVENT_ID}/presence/${DEVICE_ID}/${TAB_ID}`);
-  await set(myRef, true);
-  onDisconnect(myRef).remove();
+  // ========= presence（キーに DEVICE_ID を使用） =========
+  const EVENT_ID = "your-event-id";
+  const TAB_ID   = (crypto?.randomUUID?.() ?? String(Math.random()).slice(2));
+  onAuthStateChanged(auth, async (user) => {
+    if (!user) return;
+    const myRef = ref(db, `rooms/${EVENT_ID}/presence/${DEVICE_ID}/${TAB_ID}`);
+    await set(myRef, true);
+    onDisconnect(myRef).remove();
 
-  window.CURRENT_UID = user.uid;           // これは残してOK（必要なら使う）
-  console.log("[AUTH] devId =", DEVICE_ID, "tab =", TAB_ID);
-});
+    window.CURRENT_UID = user.uid;
+    console.log("[AUTH] devId =", DEVICE_ID, "tab =", TAB_ID);
+  });
 
-  // 他スクリプトが使う用
-  window.firebaseDB = { db, ref, onDisconnect, set };
-  // ========= ここまで重要 =========
+  // ========= ★ グローバル一時停止（復元） =========
+  (function installGlobalPause(db){
+    let paused = false;
+
+    // オーバーレイ
+    const overlay = document.createElement('div');
+    overlay.style.cssText = `
+      position:fixed; inset:0; display:none; z-index:99999;
+      backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+      background: rgba(0,0,0,.65); color:#fff;
+      font:600 18px/1.4 system-ui, -apple-system, "Noto Sans JP", sans-serif;
+      align-items:center; justify-content:center; text-align:center; padding:24px;
+    `;
+    overlay.innerHTML = `
+      <div style="max-width:740px;">
+        <div style="font-size:22px; margin-bottom:8px;">一時停止中</div>
+        <div id="__pauseMsg" style="opacity:.9;"></div>
+      </div>`;
+    document.body.appendChild(overlay);
+    const msgEl = overlay.querySelector('#__pauseMsg');
+
+    // Realtime DB の状態購読
+    onValue(ref(db, 'game/control/state'), (snap)=>{
+      const s = snap.exists()? snap.val(): null;
+      paused = !!(s && s.paused);
+      if (paused){
+        msgEl.textContent = s?.message || 'オーナーが一時停止しました';
+        overlay.style.display = 'flex';
+      }else{
+        overlay.style.display = 'none';
+      }
+    });
+
+    // 入力のキャプチャ段階ブロック
+    const block = (e)=>{ if (paused){ e.stopPropagation(); e.preventDefault(); } };
+    ['click','mousedown','mouseup','touchstart','touchend','keydown','keyup','pointerdown','pointerup']
+      .forEach(type=> document.addEventListener(type, block, true));
+
+    // アクション用ガード（インベントリ倉庫ボタン等から呼ぶ）
+    window.assertNotPaused = function(){
+      if (paused) throw new Error('PAUSED');
+    };
+  })(db);
+
+  // ========= 他スクリプトから使うAPI（runTransaction も公開） =========
+  window.firebaseDB = { db, ref, onDisconnect, set, runTransaction };
 </script>
+
 
 
 
 </body>
 </html>
+
 
 
 
