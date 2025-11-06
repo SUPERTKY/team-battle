@@ -186,37 +186,6 @@
   <button id="invBtn" class="btn">🍄 インベントリ</button>
 </div>
 
-<!-- ★追加：全ページ共通の DEVICE_ID を作る（localStorage + Cookie で永続化） -->
-<script>
-(function(){
-  const KEY = 'game_device_id_v1';
-  if (window.DEVICE_ID) return; // 二重実行防止
-
-  let id = null;
-  try { id = localStorage.getItem(KEY); } catch(_) {}
-
-  // localStorage が無い/消えた場合の保険として Cookie からも復元
-  if (!id) {
-    try {
-      const m = document.cookie.match(/(?:^|; )device_id=([^;]+)/);
-      if (m) id = decodeURIComponent(m[1]);
-    } catch(_) {}
-  }
-
-  // どちらにも無ければ新規発行
-  if (!id) {
-    id = (crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2));
-    try { localStorage.setItem(KEY, id); } catch(_) {}
-    try {
-      document.cookie = "device_id=" + encodeURIComponent(id)
-        + "; path=/; max-age=" + (60*60*24*365*10) + "; samesite=lax";
-    } catch(_) {}
-  }
-
-  // グローバル公開（他スクリプトから参照可能に）
-  window.DEVICE_ID = id;
-})();
-</script>
 
   <script>
     const zone    = document.getElementById('hotzone');
@@ -726,18 +695,9 @@ function rollDrops(seed){
   </script>
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
-  import {
-    getDatabase, ref, set, onDisconnect, onValue, runTransaction
-  } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js";
-  import {
-    initializeAuth,
-    indexedDBLocalPersistence,
-    browserLocalPersistence,
-    onAuthStateChanged,
-    signInAnonymously
-  } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
+  import { getDatabase, ref, push, onValue, runTransaction } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js";
 
-  // ==== あなたの設定（そのまま） ====
+  // ★必ず databaseURL を入れる！
   const firebaseConfig = {
     apiKey: "AIzaSyDPe5cSCavq5gHopugdOfQ-9_50cTrqmyk",
     authDomain: "school-178c2.firebaseapp.com",
@@ -751,82 +711,12 @@ function rollDrops(seed){
   const app = initializeApp(firebaseConfig);
   const db  = getDatabase(app);
 
-  // ========= Auth（匿名） & 多タブ制御 =========
-  const auth = initializeAuth(app, {
-    persistence: [indexedDBLocalPersistence, browserLocalPersistence],
-  });
+  // 他スクリプトが使うために公開（Authは載せない）
+  window.firebaseDB = { db, ref, push, onValue, runTransaction };
 
-  const AUTH_LOCK_KEY = "fb_auth_lock_v1";
-  const AUTH_CH       = "fb_auth_bc_v1";
-  const bc = ("BroadcastChannel" in window) ? new BroadcastChannel(AUTH_CH) : null;
-
-  function acquireLock() {
-    const now = Date.now();
-    try {
-      const raw = localStorage.getItem(AUTH_LOCK_KEY);
-      const t = raw ? Number(raw) : 0;
-      if (!raw || !t || (now - t) > 10000) { // 10秒で期限切れ
-        localStorage.setItem(AUTH_LOCK_KEY, String(now));
-        return true;
-      }
-    } catch {}
-    return false;
-  }
-  function releaseLock() { try { localStorage.removeItem(AUTH_LOCK_KEY); } catch {} }
-
-  await auth.authStateReady();
-
-  if (!auth.currentUser) {
-    const iAmLeader = acquireLock();
-    if (iAmLeader) {
-      try {
-        await signInAnonymously(auth);
-        bc?.postMessage({ type: "signed-in" });
-      } finally {
-        releaseLock();
-      }
-    } else {
-      const wait = new Promise((resolve) => {
-        const onMsg = (ev) => { if (ev?.data?.type === "signed-in") resolve(); };
-        bc?.addEventListener?.("message", onMsg, { once: true });
-        setTimeout(resolve, 12000);
-      });
-      await wait;
-
-      await auth.authStateReady();
-      if (!auth.currentUser) {
-        const got = acquireLock();
-        if (got) {
-          try {
-            await signInAnonymously(auth);
-            bc?.postMessage({ type: "signed-in" });
-          } finally {
-            releaseLock();
-          }
-        }
-      }
-    }
-  }
-
-  // ========= presence（キーを DEVICE_ID に統一） =========
-  const EVENT_ID = "your-event-id";
-  const TAB_ID   = (crypto?.randomUUID?.() ?? String(Math.random()).slice(2));
-  onAuthStateChanged(auth, async (user) => {
-    if (!user) return;
-    const devId = (window.DEVICE_ID || "unknown-device");
-    const myRef = ref(db, `rooms/${EVENT_ID}/presence/${devId}/${TAB_ID}`);
-    await set(myRef, true);
-    onDisconnect(myRef).remove();
-
-    window.CURRENT_UID = user.uid;
-    console.log("[AUTH] devId =", devId, "uid =", user.uid, "tab =", TAB_ID);
-  });
-
-  // ========= ★ グローバル一時停止（復元） =========
+  /* === 一時停止フック（DBのみでOK） === */
   (function installGlobalPause(db){
     let paused = false;
-
-    // オーバーレイ（表示テキスト付き）
     const overlay = document.createElement('div');
     overlay.style.cssText = `
       position:fixed; inset:0; display:none; z-index:99999;
@@ -842,49 +732,28 @@ function rollDrops(seed){
     document.body.appendChild(overlay);
     const msgEl = overlay.querySelector('#__pauseMsg');
 
-    // DBの状態を購読
     onValue(ref(db, 'game/control/state'), (snap)=>{
       const s = snap.exists()? snap.val(): null;
       paused = !!(s && s.paused);
-      if (paused){
-        msgEl.textContent = s?.message || 'オーナーが一時停止しました';
-        overlay.style.display = 'flex';
-      }else{
-        overlay.style.display = 'none';
-      }
+      overlay.style.display = paused ? 'flex' : 'none';
+      if (paused) msgEl.textContent = s?.message || 'オーナーが一時停止しました';
     });
 
-    // 入力ブロック（キャプチャ段階）
     const block = (e)=>{ if (paused){ e.stopPropagation(); e.preventDefault(); } };
     ['click','mousedown','mouseup','touchstart','touchend','keydown','keyup','pointerdown','pointerup']
-      .forEach(type=> document.addEventListener(type, block, true));
+      .forEach(t=> document.addEventListener(t, block, true));
 
-    // 他スクリプト用のガード
     window.assertNotPaused = function(){
       if (paused) throw new Error('PAUSED');
     };
   })(db);
-
-  // ========= 他スクリプトから使うAPI =========
-  window.firebaseDB = { db, ref, onDisconnect, set, runTransaction };
 </script>
-
-
 
 
 
 
 </body>
 </html>
-
-
-
-
-
-
-
-
-
 
 
 
