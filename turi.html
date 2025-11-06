@@ -206,37 +206,6 @@
       <feGaussianBlur stdDeviation="1.2"/>
     </filter>
   </svg>
-<!-- ★追加：全ページ共通の DEVICE_ID を作成＆共有 -->
-<script>
-(function(){
-  const KEY = 'game_device_id_v1';
-  if (window.DEVICE_ID) return; // 二重実行防止
-
-  let id = null;
-  try { id = localStorage.getItem(KEY); } catch(_) {}
-
-  // localStorage が使えない/空のとき Cookie から復元
-  if (!id) {
-    try {
-      const m = document.cookie.match(/(?:^|; )device_id=([^;]+)/);
-      if (m) id = decodeURIComponent(m[1]);
-    } catch(_) {}
-  }
-
-  // どちらにも無ければ新規発行
-  if (!id) {
-    id = (crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2));
-    try { localStorage.setItem(KEY, id); } catch(_) {}
-    try {
-      document.cookie = "device_id=" + encodeURIComponent(id)
-        + "; path=/; max-age=" + (60*60*24*365*10) + "; samesite=lax";
-    } catch(_) {}
-  }
-
-  // グローバルへ公開
-  window.DEVICE_ID = id;
-})();
-</script>
 
 <script>
   // === 共通の TEAM 解決（URL ?team=1 等 → localStorage → 既定 team1） ===
@@ -341,7 +310,20 @@ function debugCatchLog({rank,species,sizePx,hpLeft}){
     `[CATCH] rank=${rank} species=${species} size=${Math.round(sizePx)}px hpLeft=${hpLeft}`
   );
 }
+// 端への接近度（0〜1）。1に近いほど端ギリギリ
+function edgeProximity(x, y, w, h, margin = CONFIG.EDGE_MARGIN) {
+  const dx = Math.min(x - margin, (w - margin) - x);
+  const dy = Math.min(y - margin, (h - margin) - y);
+  const nx = clamp(1 - (dx / margin), 0, 1);
+  const ny = clamp(1 - (dy / margin), 0, 1);
+  return Math.max(nx, ny);
+}
 
+// 角度補間（短い回転方向で補間）
+function lerpAngle(a, b, t){
+  const diff = ((b - a + 540) % 360) - 180;
+  return a + diff * t;
+}
 
 
 const stage = document.getElementById('stage');
@@ -794,167 +776,72 @@ function pushGetReport(species){
 </script>
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
-  import { getDatabase, ref, set, onDisconnect, runTransaction, onValue } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js";
-  import {
-    initializeAuth,
-    indexedDBLocalPersistence,
-    browserLocalPersistence,
-    onAuthStateChanged,
-    signInAnonymously
-  } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
+ import { getDatabase, ref, push, onValue, runTransaction } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js";
 
-  // ==== あなたの設定（そのまま） ====
-  const firebaseConfig = {
-    apiKey: "AIzaSyDPe5cSCavq5gHopugdOfQ-9_50cTrqmyk",
-    authDomain: "school-178c2.firebaseapp.com",
-    databaseURL: "https://school-178c2-default-rtdb.europe-west1.firebasedatabase.app",
-    projectId: "school-178c2",
-    storageBucket: "school-178c2.firebasestorage.app",
-    messagingSenderId: "409885673101",
-    appId: "1:409885673101:web:25bf0483547e2d470304c4"
-  };
 
+const firebaseConfig = {
+  apiKey: "AIzaSyDPe5cSCavq5gHopugdOfQ-9_50cTrqmyk",
+  authDomain: "school-178c2.firebaseapp.com",
+  databaseURL: "https://school-178c2-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "school-178c2",
+  storageBucket: "school-178c2.firebasestorage.app",
+  messagingSenderId: "409885673101",
+  appId: "1:409885673101:web:25bf0483547e2d470304c4"
+};
   const app = initializeApp(firebaseConfig);
-  const db  = getDatabase(app);
+  const db = getDatabase(app);
+// === グローバル一時停止フック ===
+(function installGlobalPause(db){
+  let paused = false;
 
-  // ========= Auth（匿名） & 多タブ制御 =========
-  const auth = initializeAuth(app, {
-    persistence: [indexedDBLocalPersistence, browserLocalPersistence],
-  });
+  // オーバーレイ生成
+  const overlay = document.createElement('div');
+  overlay.style.cssText = `
+    position:fixed; inset:0; display:none; z-index:99999;
+    backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+    background: rgba(0,0,0,.65); color:#fff;
+    font:600 18px/1.4 system-ui, -apple-system, "Noto Sans JP", sans-serif;
+    align-items:center; justify-content:center; text-align:center; padding:24px;
+  `;
+  overlay.innerHTML = `
+    <div style="max-width:740px;">
+      <div style="font-size:22px; margin-bottom:8px;">一時停止中</div>
+      <div id="__pauseMsg" style="opacity:.9;"></div>
+    </div>`;
+  document.body.appendChild(overlay);
+  const msgEl = overlay.querySelector('#__pauseMsg');
 
-  const AUTH_LOCK_KEY = "fb_auth_lock_v1";
-  const AUTH_CH       = "fb_auth_bc_v1";
-  const bc = ("BroadcastChannel" in window) ? new BroadcastChannel(AUTH_CH) : null;
-
-  function acquireLock() {
-    const now = Date.now();
-    try {
-      const raw = localStorage.getItem(AUTH_LOCK_KEY);
-      const t = raw ? Number(raw) : 0;
-      // 10秒で期限切れにして、落ちたタブのロックを回収
-      if (!raw || !t || (now - t) > 10000) {
-        localStorage.setItem(AUTH_LOCK_KEY, String(now));
-        return true;
-      }
-    } catch {}
-    return false;
-  }
-  function releaseLock() { try { localStorage.removeItem(AUTH_LOCK_KEY); } catch {} }
-
-  // 既存セッションの復元完了を待つ
-  await auth.authStateReady();
-
-  // まだログインしていなければ、どれか1タブだけが匿名サインイン
-  if (!auth.currentUser) {
-    const iAmLeader = acquireLock();
-    if (iAmLeader) {
-      try {
-        await signInAnonymously(auth);
-        bc?.postMessage({ type: "signed-in" });
-      } finally {
-        releaseLock();
-      }
-    } else {
-      // リーダータブがサインイン完了するのを待機（最大12秒）
-      const wait = new Promise((resolve) => {
-        const onMsg = (ev) => { if (ev?.data?.type === "signed-in") resolve(); };
-        bc?.addEventListener?.("message", onMsg, { once: true });
-        setTimeout(resolve, 12000);
-      });
-      await wait;
-
-      // それでも currentUser が居なければ最後の切り札で signIn
-      await auth.authStateReady();
-      if (!auth.currentUser) {
-        const got = acquireLock();
-        if (got) {
-          try {
-            await signInAnonymously(auth);
-            bc?.postMessage({ type: "signed-in" });
-          } finally {
-            releaseLock();
-          }
-        }
-      }
+  // 状態購読（game/control/state）
+  onValue(ref(db, 'game/control/state'), (snap)=>{
+    const s = snap.exists()? snap.val(): null;
+    paused = !!(s && s.paused);
+    if (paused){
+      msgEl.textContent = s?.message || 'オーナーが一時停止しました';
+      overlay.style.display = 'flex';
+    }else{
+      overlay.style.display = 'none';
     }
-  }
-
-  // ========= presence（キーを DEVICE_ID に統一） =========
-  const EVENT_ID = "your-event-id";
-  const TAB_ID   = (crypto?.randomUUID?.() ?? String(Math.random()).slice(2));
-  onAuthStateChanged(auth, async (user) => {
-    if (!user) return;
-    const devId = (window.DEVICE_ID || "unknown-device");
-    const myRef = ref(db, `rooms/${EVENT_ID}/presence/${devId}/${TAB_ID}`);
-    await set(myRef, true);
-    onDisconnect(myRef).remove();
-
-    // （任意）デバッグ
-    window.CURRENT_UID = user.uid;
-    console.log("[AUTH] devId =", devId, "uid =", user.uid, "tab =", TAB_ID);
   });
 
-  // ========= ★ グローバル一時停止（復元） =========
-  (function installGlobalPause(db){
-    let paused = false;
+  // 入力ブロック（キャプチャ段階）
+  const block = (e)=>{ if (paused){ e.stopPropagation(); e.preventDefault(); } };
+  ['click','mousedown','mouseup','touchstart','touchend','keydown','keyup','pointerdown','pointerup'].forEach(type=>{
+    document.addEventListener(type, block, true);
+  });
 
-    // オーバーレイ（表示テキスト付き）
-    const overlay = document.createElement('div');
-    overlay.style.cssText = `
-      position:fixed; inset:0; display:none; z-index:99999;
-      backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
-      background: rgba(0,0,0,.65); color:#fff;
-      font:600 18px/1.4 system-ui,-apple-system,"Noto Sans JP",sans-serif;
-      align-items:center; justify-content:center; text-align:center; padding:24px;`;
-    overlay.innerHTML = `
-      <div style="max-width:740px;">
-        <div style="font-size:22px; margin-bottom:8px;">一時停止中</div>
-        <div id="__pauseMsg" style="opacity:.9;"></div>
-      </div>`;
-    document.body.appendChild(overlay);
-    const msgEl = overlay.querySelector('#__pauseMsg');
+  // 必要なら各アクションの先頭で呼べるガード
+  window.assertNotPaused = function(){
+    if (paused) throw new Error('PAUSED');
+  };
+})(db);
 
-    // DBの状態を購読
-    onValue(ref(db, 'game/control/state'), (snap)=>{
-      const s = snap.exists()? snap.val(): null;
-      paused = !!(s && s.paused);
-      if (paused){
-        msgEl.textContent = s?.message || 'オーナーが一時停止しました';
-        overlay.style.display = 'flex';
-      }else{
-        overlay.style.display = 'none';
-      }
-    });
-
-    // 入力ブロック（キャプチャ段階）
-    const block = (e)=>{ if (paused){ e.stopPropagation(); e.preventDefault(); } };
-    ['click','mousedown','mouseup','touchstart','touchend','keydown','keyup','pointerdown','pointerup']
-      .forEach(type=> document.addEventListener(type, block, true));
-
-    // 他スクリプト用のガード
-    window.assertNotPaused = function(){
-      if (paused) throw new Error('PAUSED');
-    };
-  })(db);
-
-  // ========= 他スクリプトから使うAPI =========
-  window.firebaseDB = { db, ref, onDisconnect, set, runTransaction };
+  // 他のスクリプトから使えるように window に載せる
+  window.firebaseDB = { db, ref, push, runTransaction };
 </script>
-
-
 
 
 </body>
 </html>
-
-
-
-
-
-
-
-
-
 
 
 
